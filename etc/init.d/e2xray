@@ -1,0 +1,18 @@
+#!/bin/sh
+
+CTL="/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh"
+
+case "$1" in
+    start)
+        # e2xray is intentionally off after boot until the user presses Start.
+        ;;
+    stop|restart|status)
+        "$CTL" "$1"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+exit 0

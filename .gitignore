@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.deb
+*.ipk
+*.zip
+*.tar.gz
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,13 @@
+* text=auto
+
+*.sh text eol=lf
+*.py text eol=lf
+DEBIAN/control text eol=lf
+DEBIAN/conffiles text eol=lf
+DEBIAN/postinst text eol=lf
+DEBIAN/prerm text eol=lf
+etc/init.d/e2xray text eol=lf
+etc/e2xray/server.conf text eol=lf
+
+*.png binary
+usr/lib/e2xray/bin/xray binary

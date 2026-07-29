@@ -16,14 +16,10 @@ The user does not need to install Xray separately.
 Download the ARM64 Debian package from:
 
 ```text
-https://github.com/dreamboxone/e2xray/releases/download/v0.2.0/enigma2-plugin-extensions-e2xray_0.2.0_arm64.deb
+https://github.com/dreamboxone/e2xray/releases/download/v0.3.2/enigma2-plugin-extensions-e2xray_0.3.2_arm64.deb
 ```
 
-SHA256:
-
-```text
-8066C7E0D38CF584C768E5E6C0C1D778BE42266124CD81336CDD4A6B32F8E832
-```
+The SHA256 checksum is published beside the package in the GitHub release notes.
 
 ## Build
 
@@ -39,13 +35,17 @@ chmod +x build.sh
 
 The main plugin screen contains:
 
-- Start
 - Stop
+- Start
 - Ping
-- Internet status / وضعیت اینترنت / حالة الإنترنت
-- About
 - Settings
-- Restart, service status and logs in the Menu screen
+- Internet status / وضعیت اینترنت / حالة الإنترنت
+
+The default interface language is English. Settings contains:
+
+- Language: English, Persian or Arabic
+- Config. Entry: VLESS link import plus manual server fields
+- About: project version and Telegram, YouTube and GitHub addresses
 
 Internet status logic:
 
@@ -53,25 +53,34 @@ Internet status logic:
 - Can reach ArvanCloud and `https://dash.cloudflare.com`: green lamp, `آنلاین`
 - Can reach ArvanCloud but cannot reach Cloudflare dashboard: yellow lamp, `اینترنت ملی`
 
+Ping checks the server from the saved VLESS configuration. It reports
+`No Config. Found` when no valid configuration has been saved.
+
 ## Install
 
 Copy the package to `/tmp` on Dreambox:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.2.0_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.3.2_arm64.deb
 ```
 
-Restart Enigma2 after installation.
-
-If the plugin list is not refreshed automatically:
+Reboot the Dreambox after installation so Enigma2 reloads the plugin and icon:
 
 ```sh
-systemctl restart enigma2
+reboot
 ```
 
 ## Configuration
 
-Use the settings screen or edit:
+Open Settings and select Config. Entry. You can import a `vless://` share link
+or enter the server, port, UUID, SNI, public key, short ID, fingerprint,
+security, network, path, host and flow manually. Save with the green button.
+Reality, TLS, TCP, WebSocket and gRPC VLESS links are supported.
+
+e2xray is always off after installation and after boot. It starts only when
+the user presses Start.
+
+The parsed settings are saved in:
 
 ```sh
 /etc/e2xray/server.conf
@@ -81,6 +90,13 @@ The generated runtime config is:
 
 ```sh
 /etc/e2xray/config.json
+```
+
+DNS is managed internally and is not requested from the user:
+
+```text
+Primary:   8.8.8.8
+Secondary: 1.1.1.1
 ```
 
 ## TUN Safety

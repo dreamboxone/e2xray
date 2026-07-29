@@ -1,0 +1,12 @@
+#!/bin/sh
+PLUGIN_DIR=/usr/lib/enigma2/python/Plugins/Extensions/e2xray
+
+rm -f "$PLUGIN_DIR/"*.pyc "$PLUGIN_DIR/"*.pyo 2>/dev/null || true
+rm -rf "$PLUGIN_DIR/__pycache__" 2>/dev/null || true
+chmod 755 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh 2>/dev/null || true
+chmod 755 /etc/init.d/e2xray 2>/dev/null || true
+chmod 755 /usr/lib/e2xray/bin/xray 2>/dev/null || true
+/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh stop >/dev/null 2>&1 || true
+/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh install-init >/dev/null 2>&1 || true
+echo "e2xray installed. Reboot the Dreambox before opening the plugin."
+exit 0
