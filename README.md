@@ -31,6 +31,18 @@ chmod +x build.sh
 ./build.sh
 ```
 
+## GitHub Actions
+
+The Debian package can also be built manually from the repository:
+
+1. Open the **Actions** tab.
+2. Select **Build Debian package**.
+3. Select **Run workflow**.
+4. Download the generated artifact after the job completes.
+
+The artifact contains the ARM64 Debian package and its SHA256 checksum. Package
+metadata and the output filename are read from `DEBIAN/control`.
+
 ## Main Screen
 
 The main plugin screen contains:

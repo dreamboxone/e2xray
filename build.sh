@@ -3,12 +3,27 @@ set -eu
 
 PROJECT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 OUTPUT_DIR="${1:-$(dirname "$PROJECT_DIR")}"
-PACKAGE="enigma2-plugin-extensions-e2xray_0.3.2_arm64.deb"
+CONTROL_FILE="$PROJECT_DIR/DEBIAN/control"
 
 command -v dpkg-deb >/dev/null 2>&1 || {
     echo "dpkg-deb is required to build the package." >&2
     exit 1
 }
+
+control_value() {
+    sed -n "s/^$1:[[:space:]]*//p" "$CONTROL_FILE" | head -n 1
+}
+
+PACKAGE_NAME="$(control_value Package)"
+PACKAGE_VERSION="$(control_value Version)"
+PACKAGE_ARCH="$(control_value Architecture)"
+
+if [ -z "$PACKAGE_NAME" ] || [ -z "$PACKAGE_VERSION" ] || [ -z "$PACKAGE_ARCH" ]; then
+    echo "Package, Version, and Architecture are required in DEBIAN/control." >&2
+    exit 1
+fi
+
+PACKAGE="${PACKAGE_NAME}_${PACKAGE_VERSION}_${PACKAGE_ARCH}.deb"
 
 chmod 755 "$PROJECT_DIR/DEBIAN/postinst"
 chmod 755 "$PROJECT_DIR/DEBIAN/prerm"

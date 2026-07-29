@@ -1,0 +1,70 @@
+name: Build Debian package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ARM64 DEB
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Read package metadata
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package="$(sed -n 's/^Package:[[:space:]]*//p' DEBIAN/control | head -n 1)"
+          version="$(sed -n 's/^Version:[[:space:]]*//p' DEBIAN/control | head -n 1)"
+          architecture="$(sed -n 's/^Architecture:[[:space:]]*//p' DEBIAN/control | head -n 1)"
+
+          test -n "$package"
+          test -n "$version"
+          test "$architecture" = "arm64"
+
+          filename="${package}_${version}_${architecture}.deb"
+          echo "filename=$filename" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${package}_${version}_${architecture}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate embedded Xray
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          xray="usr/lib/e2xray/bin/xray"
+          test -s "$xray"
+          readelf -h "$xray" | grep -Eq 'Machine:[[:space:]]+AArch64'
+
+      - name: Build package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist
+          chmod +x build.sh
+          ./build.sh "$GITHUB_WORKSPACE/dist"
+
+          cd dist
+          test -s "${{ steps.package.outputs.filename }}"
+          sha256sum "${{ steps.package.outputs.filename }}" \
+            > "${{ steps.package.outputs.filename }}.sha256"
+          dpkg-deb --info "${{ steps.package.outputs.filename }}"
+          dpkg-deb --contents "${{ steps.package.outputs.filename }}" >/dev/null
+
+      - name: Upload package
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            dist/${{ steps.package.outputs.filename }}
+            dist/${{ steps.package.outputs.filename }}.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
