@@ -1,2 +1,2 @@
 # e2xray
-xray vpn for Enigma2 
+Xray Client for Enigma2 
