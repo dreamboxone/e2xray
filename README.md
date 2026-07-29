@@ -9,14 +9,21 @@ It runs an embedded Xray-core binary from:
 /usr/lib/e2xray/bin/xray
 ```
 
-The package also includes:
+The user does not need to install Xray separately.
 
-```sh
-/usr/share/e2xray/geoip.dat
-/usr/share/e2xray/geosite.dat
+## Download
+
+Download the ARM64 Debian package from:
+
+```text
+https://github.com/dreamboxone/e2xray/releases/download/v0.2.0/enigma2-plugin-extensions-e2xray_0.2.0_arm64.deb
 ```
 
-The user does not need to install Xray separately.
+SHA256:
+
+```text
+8066C7E0D38CF584C768E5E6C0C1D778BE42266124CD81336CDD4A6B32F8E832
+```
 
 ## Build
 
