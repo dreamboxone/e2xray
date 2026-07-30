@@ -52,6 +52,7 @@ jobs:
           import importlib.util
           import json
           from pathlib import Path
+          from tempfile import TemporaryDirectory
 
           parser_path = Path(
               "usr/lib/enigma2/python/Plugins/Extensions/e2xray/proxy_config.py"
@@ -72,6 +73,7 @@ jobs:
               "tls": "tls",
               "sni": "vmess.example.com",
               "fp": "chrome",
+              "ps": "VMess Main",
           }
           vmess_link = "vmess://" + base64.urlsafe_b64encode(
               json.dumps(vmess).encode()
@@ -81,7 +83,7 @@ jobs:
               (
                   "vless://11111111-1111-4111-8111-111111111111@192.0.2.1:2096"
                   "?encryption=none&security=tls&sni=example.com&fp=chrome"
-                  "&type=ws&host=example.com&path=%2F",
+                  "&type=ws&host=example.com&path=%2F#Germany%201",
                   "vless",
                   "websocket",
               ),
@@ -89,12 +91,12 @@ jobs:
               (
                   "trojan://secret@203.0.113.3:443?security=reality"
                   "&sni=example.org&fp=chrome&pbk=public-key&sid=abcd&type=grpc"
-                  "&serviceName=route",
+                  "&serviceName=route#Trojan%20Main",
                   "trojan",
                   "grpc",
               ),
               (
-                  "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@203.0.113.4:8388",
+                  "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@203.0.113.4:8388#SS%20Main",
                   "shadowsocks",
                   "raw",
               ),
@@ -108,6 +110,39 @@ jobs:
               config = parser.build_xray_config(parsed)
               assert config["inbounds"][0]["protocol"] == "tun"
               assert config["outbounds"][0]["tag"] == "proxy"
+
+          with TemporaryDirectory() as folder:
+              config_path = Path(folder) / "config.txt"
+              selection_path = Path(folder) / "selected"
+              runtime_path = Path(folder) / "user.conf"
+              xray_path = Path(folder) / "xray.json"
+              config_path.write_text(
+                  "\n".join(case[0] for case in cases) + "\n",
+                  encoding="utf-8",
+              )
+              profiles = parser.read_profiles(str(config_path))
+              assert [item["PROFILE_NAME"] for item in profiles] == [
+                  "Germany 1",
+                  "VMess Main",
+                  "Trojan Main",
+                  "SS Main",
+              ]
+              assert len({item["PROFILE_ID"] for item in profiles}) == 4
+              parser.write_selection(
+                  str(selection_path),
+                  profiles[2]["PROFILE_ID"],
+              )
+              selected = parser.read_config(
+                  str(config_path),
+                  str(selection_path),
+              )
+              assert selected["PROFILE_NAME"] == "Trojan Main"
+              parser.write_runtime(str(runtime_path), selected)
+              parser.write_xray_config(str(xray_path), selected)
+              assert "PROFILE_NAME='Trojan Main'" in runtime_path.read_text()
+              assert json.loads(xray_path.read_text())["outbounds"][0][
+                  "protocol"
+              ] == "trojan"
           PY
 
       - name: Build package

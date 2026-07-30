@@ -10,6 +10,7 @@ binary, so the user does not need to download or install Xray separately.
 - Start, Stop, Ping and Settings controls
 - English, Persian and Arabic user interfaces
 - VLESS, VMess, Trojan and Shadowsocks share links
+- Multiple named configurations selected directly on the main screen
 - RAW/TCP, WebSocket, gRPC and XHTTP transports where the protocol permits
 - TLS and REALITY transport security
 - Embedded DNS defaults: `8.8.8.8` and `1.1.1.1`
@@ -22,7 +23,7 @@ user presses Start.
 
 ## Configuration
 
-Paste exactly one supported share link into:
+Paste one supported share link per line into:
 
 ```text
 /root/config.txt
@@ -37,9 +38,17 @@ trojan://
 ss://
 ```
 
-The same links can be entered from **Settings > Config. Entry**. Paste one
-complete share link and save it with the green button. Start and Ping parse and
-validate `/root/config.txt` every time they are pressed.
+The name after `#` is URL-decoded and displayed below Internet Status on the
+main screen. VMess also uses its `ps` field when no fragment name exists.
+Move through the vertical list with Up/Down and press OK to select a profile.
+A green `X` marks the selected stopped profile; a green check mark identifies
+the profile currently running. Start and Ping always use the selected profile.
+
+The selected profile ID is stored in:
+
+```text
+/etc/e2xray/selected
+```
 
 The generated Xray runtime configuration is:
 
@@ -68,7 +77,7 @@ chmod +x build.sh
 The output is:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.4.2_arm64.deb
+enigma2-plugin-extensions-e2xray_0.5.0_arm64.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
@@ -83,7 +92,7 @@ package > Run workflow**. The artifact contains the DEB and its SHA256 file.
 Upload the DEB to `/tmp` and run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.4.2_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.0_arm64.deb
 ```
 
 The post-install script prints:

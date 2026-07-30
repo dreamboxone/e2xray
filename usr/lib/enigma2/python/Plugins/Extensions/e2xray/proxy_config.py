@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import base64
+import hashlib
 import io
 import json
 import os
@@ -23,7 +24,13 @@ except NameError:
 
 
 SUPPORTED_SCHEMES = ("vless://", "vmess://", "trojan://", "ss://")
-RUNTIME_FIELDS = ("PROTOCOL", "SERVER_ADDRESS", "SERVER_PORT")
+RUNTIME_FIELDS = (
+    "PROFILE_ID",
+    "PROFILE_NAME",
+    "PROTOCOL",
+    "SERVER_ADDRESS",
+    "SERVER_PORT",
+)
 LEGACY_FIELDS = (
     "SERVER_ADDRESS",
     "SERVER_PORT",
@@ -46,6 +53,33 @@ def as_text(value):
     if isinstance(value, bytes):
         return value.decode("utf-8")
     return text_type(value)
+
+
+def sanitize_name(value):
+    value = unquote(as_text(value or ""))
+    value = value.replace("\x00", " ").replace("\r", " ").replace("\n", " ")
+    value = " ".join(value.split())
+    return value[:96]
+
+
+def fragment_name(entry):
+    parts = as_text(entry).split("#", 1)
+    if len(parts) != 2:
+        return ""
+    return sanitize_name(parts[1])
+
+
+def finalize_profile(parsed, entry, fallback_index=None):
+    entry = as_text(entry).strip()
+    embedded_name = parsed.pop("_NAME", "")
+    name = fragment_name(entry) or sanitize_name(embedded_name)
+    if not name:
+        suffix = " %d" % fallback_index if fallback_index is not None else ""
+        name = "%s%s" % (parsed["PROTOCOL"].upper(), suffix)
+    parsed["PROFILE_ID"] = hashlib.sha256(entry.encode("utf-8")).hexdigest()
+    parsed["PROFILE_NAME"] = name
+    parsed["LINK"] = entry
+    return parsed
 
 
 def query_value(query, key, default=""):
@@ -281,9 +315,11 @@ def parse_vmess(entry):
     }
     stream_values = dict(values)
     stream_values["security"] = first_value(values, ("tls",), "none")
-    return parsed_result(
+    parsed = parsed_result(
         "vmess", address, port, settings, common_stream(stream_values)
     )
+    parsed["_NAME"] = first_value(values, ("ps", "name"), "")
+    return parsed
 
 
 def split_host_port(value):
@@ -387,17 +423,19 @@ def parse_share_link(entry):
     entry = as_text(entry).strip()
     lower = entry.lower()
     if lower.startswith("vless://"):
-        return parse_vless(entry)
-    if lower.startswith("vmess://"):
-        return parse_vmess(entry)
-    if lower.startswith("trojan://"):
-        return parse_trojan(entry)
-    if lower.startswith("ss://"):
-        return parse_shadowsocks(entry)
-    raise ValueError("unsupported configuration protocol")
+        parsed = parse_vless(entry)
+    elif lower.startswith("vmess://"):
+        parsed = parse_vmess(entry)
+    elif lower.startswith("trojan://"):
+        parsed = parse_trojan(entry)
+    elif lower.startswith("ss://"):
+        parsed = parse_shadowsocks(entry)
+    else:
+        raise ValueError("unsupported configuration protocol")
+    return finalize_profile(parsed, entry)
 
 
-def read_config(path):
+def read_profiles(path):
     with io.open(path, "r", encoding="utf-8-sig") as config_file:
         content = config_file.read()
     entries = [
@@ -408,10 +446,60 @@ def read_config(path):
     if not entries:
         raise ValueError("no configuration found")
     if entries[0].lower().startswith(SUPPORTED_SCHEMES):
-        if len(entries) != 1:
-            raise ValueError("config.txt must contain exactly one share link")
-        return parse_share_link(entries[0])
-    return parse_legacy(content)
+        profiles = []
+        for index, entry in enumerate(entries, 1):
+            if not entry.lower().startswith(SUPPORTED_SCHEMES):
+                raise ValueError("line %d is not a supported share link" % index)
+            try:
+                parsed = parse_share_link(entry)
+            except ValueError as error:
+                raise ValueError("line %d: %s" % (index, error))
+            if not fragment_name(entry) and not parsed.get("PROFILE_NAME"):
+                parsed["PROFILE_NAME"] = "%s %d" % (
+                    parsed["PROTOCOL"].upper(),
+                    index,
+                )
+            elif parsed["PROFILE_NAME"] == parsed["PROTOCOL"].upper():
+                parsed["PROFILE_NAME"] = "%s %d" % (
+                    parsed["PROTOCOL"].upper(),
+                    index,
+                )
+            profiles.append(parsed)
+        return profiles
+    return [finalize_profile(parse_legacy(content), content, 1)]
+
+
+def read_selection(path):
+    try:
+        with io.open(path, "r", encoding="ascii") as source:
+            profile_id = source.readline().strip().lower()
+    except (IOError, OSError):
+        return ""
+    if re.match(r"^[0-9a-f]{64}$", profile_id):
+        return profile_id
+    return ""
+
+
+def write_selection(path, profile_id):
+    profile_id = as_text(profile_id).strip().lower()
+    if not re.match(r"^[0-9a-f]{64}$", profile_id):
+        raise ValueError("invalid profile ID")
+    parent = os.path.dirname(path)
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent)
+    atomic_write(path, profile_id + "\n")
+
+
+def select_profile(profiles, selection_path):
+    selected_id = read_selection(selection_path)
+    for profile in profiles:
+        if profile["PROFILE_ID"] == selected_id:
+            return profile
+    return profiles[0]
+
+
+def read_config(path, selection_path):
+    return select_profile(read_profiles(path), selection_path)
 
 
 def build_xray_config(parsed):
@@ -488,16 +576,19 @@ def write_xray_config(path, parsed):
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         print(
-            "Usage: proxy_config.py INPUT RUNTIME_OUTPUT XRAY_CONFIG_OUTPUT",
+            "Usage: proxy_config.py INPUT SELECTION RUNTIME_OUTPUT XRAY_CONFIG_OUTPUT",
             file=sys.stderr,
         )
         return 2
     try:
-        parsed = read_config(sys.argv[1])
-        write_runtime(sys.argv[2], parsed)
-        write_xray_config(sys.argv[3], parsed)
+        profiles = read_profiles(sys.argv[1])
+        parsed = select_profile(profiles, sys.argv[2])
+        if read_selection(sys.argv[2]) != parsed["PROFILE_ID"]:
+            write_selection(sys.argv[2], parsed["PROFILE_ID"])
+        write_runtime(sys.argv[3], parsed)
+        write_xray_config(sys.argv[4], parsed)
     except Exception as error:
         print("Invalid e2xray configuration: %s" % error, file=sys.stderr)
         return 1

@@ -1,1 +1,2 @@
-# Paste one VLESS, VMess, Trojan or Shadowsocks share link on the next line.
+# Paste one VLESS, VMess, Trojan or Shadowsocks share link per line.
+# The name after # is shown in the main-screen configuration list.

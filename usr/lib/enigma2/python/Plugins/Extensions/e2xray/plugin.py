@@ -1,44 +1,55 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 
-import io
 import os
 
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
-from Screens.VirtualKeyBoard import VirtualKeyBoard
 from Components.ActionMap import ActionMap
 from Components.ConfigList import ConfigListScreen
 from Components.Label import Label
 from Components.MenuList import MenuList
+from Components.MultiContent import MultiContentEntryText
 from Components.Pixmap import Pixmap
 from Components.config import (
     ConfigSelection,
     ConfigSubsection,
-    ConfigText,
     config,
     configfile,
     getConfigListEntry,
 )
 from Tools.Directories import fileExists
-from enigma import eConsoleAppContainer
+from enigma import (
+    RT_HALIGN_LEFT,
+    RT_VALIGN_CENTER,
+    eConsoleAppContainer,
+    eListboxPythonMultiContent,
+    gFont,
+)
 from skin import parseColor
 from . import PLUGIN_VERSION
-from .proxy_config import as_text, parse_share_link
+from .proxy_config import (
+    read_profiles,
+    read_selection,
+    select_profile,
+    write_selection,
+)
 
 PLUGIN_NAME = "e2xray"
 PLUGIN_DESCRIPTION = "Xray Client for Enigma2"
 BASE = "/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 CTL = BASE + "/e2xrayctl.sh"
 USERCONF = "/root/config.txt"
+SELECTION = "/etc/e2xray/selected"
+PIDFILE = "/var/run/e2xray/xray.pid"
+ACTIVE_PROFILE = "/var/run/e2xray/active_profile"
 
 config.plugins.e2xray = ConfigSubsection()
 config.plugins.e2xray.ui_language = ConfigSelection(
     default="en",
     choices=[("en", "English"), ("fa", "فارسی"), ("ar", "العربية")],
 )
-config.plugins.e2xray.config_entry = ConfigText(default="", fixed_size=False)
 
 TEXT = {
     "en": {
@@ -52,14 +63,14 @@ TEXT = {
         "ping": "Ping",
         "settings": "Settings",
         "language": "Language",
-        "config_entry": "Config. Entry",
+        "configurations": "Configurations",
         "about": "About",
         "save": "Save",
         "cancel": "Cancel",
         "close": "Close",
         "no_config": "No Config. Found",
         "invalid_config": "Invalid proxy configuration.",
-        "config_saved": "Configuration saved.",
+        "stop_before_change": "Stop e2xray before changing configuration.",
         "ping_ok": "Configuration server is reachable.",
         "ping_failed": "Configuration server is not reachable.",
         "missing": "e2xray control file was not found.",
@@ -77,14 +88,14 @@ TEXT = {
         "ping": "پینگ",
         "settings": "تنظیمات",
         "language": "زبان",
-        "config_entry": "ورود کانفیگ",
+        "configurations": "کانفیگ‌ها",
         "about": "درباره",
         "save": "ذخیره",
         "cancel": "انصراف",
         "close": "خروج",
         "no_config": "کانفیگی پیدا نشد",
         "invalid_config": "کانفیگ پراکسی معتبر نیست.",
-        "config_saved": "کانفیگ ذخیره شد.",
+        "stop_before_change": "پیش از تغییر کانفیگ، e2xray را متوقف کنید.",
         "ping_ok": "سرور کانفیگ در دسترس است.",
         "ping_failed": "سرور کانفیگ در دسترس نیست.",
         "missing": "فایل کنترل e2xray پیدا نشد.",
@@ -102,14 +113,14 @@ TEXT = {
         "ping": "اختبار",
         "settings": "الإعدادات",
         "language": "اللغة",
-        "config_entry": "إدخال الإعداد",
+        "configurations": "الاتصالات",
         "about": "حول",
         "save": "حفظ",
         "cancel": "إلغاء",
         "close": "إغلاق",
         "no_config": "لم يتم العثور على إعداد",
         "invalid_config": "إعداد البروكسي غير صالح.",
-        "config_saved": "تم حفظ الإعداد.",
+        "stop_before_change": "أوقف e2xray قبل تغيير الاتصال.",
         "ping_ok": "خادم الإعداد متاح.",
         "ping_failed": "خادم الإعداد غير متاح.",
         "missing": "لم يتم العثور على ملف التحكم e2xray.",
@@ -134,38 +145,81 @@ def connectSignal(signal, callback):
     return None
 
 
-def writeShareLink(entry):
-    with io.open(USERCONF, "w", encoding="utf-8") as output:
-        output.write(as_text(entry) + u"\n")
+def coreRunning():
     try:
-        os.chmod(USERCONF, 0o600)
-    except OSError:
-        pass
+        with open(PIDFILE, "r") as source:
+            pid = int(source.readline().strip())
+        os.kill(pid, 0)
+        return True
+    except (IOError, OSError, TypeError, ValueError):
+        return False
 
 
-def readShareLink():
+def activeProfileId():
+    if not coreRunning():
+        return ""
     try:
-        with io.open(USERCONF, "r", encoding="utf-8-sig") as source:
-            for line in source:
-                entry = line.strip()
-                if entry and not entry.startswith("#"):
-                    parse_share_link(entry)
-                    return entry
-    except (IOError, OSError, ValueError):
-        pass
-    return ""
+        with open(ACTIVE_PROFILE, "r") as source:
+            return source.readline().strip()
+    except (IOError, OSError):
+        return ""
+
+
+class E2XrayProfileList(MenuList):
+    def __init__(self):
+        MenuList.__init__(
+            self,
+            [],
+            enableWrapAround=True,
+            content=eListboxPythonMultiContent,
+        )
+        self.l.setFont(0, gFont("Regular", 24))
+        self.l.setItemHeight(42)
+
+    def buildEntry(self, profile):
+        symbol = profile.get("_MARK", "")
+        return [
+            profile,
+            MultiContentEntryText(
+                pos=(12, 0),
+                size=(42, 42),
+                font=0,
+                flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                text=symbol,
+                color=0x0000CC44,
+                color_sel=0x0000CC44,
+            ),
+            MultiContentEntryText(
+                pos=(62, 0),
+                size=(505, 42),
+                font=0,
+                flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                text=profile.get("PROFILE_NAME", ""),
+                color=0x00FFFFFF,
+                color_sel=0x00FFFFFF,
+            ),
+        ]
+
+    def setProfiles(self, profiles, current_index=0):
+        self.setList([self.buildEntry(profile) for profile in profiles])
+        try:
+            self.moveToIndex(current_index)
+        except Exception:
+            pass
 
 
 class E2XrayMain(Screen):
     skin = """
-    <screen name="E2XrayMain" position="center,center" size="760,330" title="e2xray">
-        <widget name="internet_label" position="85,55" size="235,42" font="Regular;26" />
-        <widget name="lamp" position="330,57" size="38,38" font="Regular;32" />
-        <widget name="internet_msg" position="385,55" size="290,42" font="Regular;26" />
-        <widget name="key_red" position="35,265" size="150,38" font="Regular;22" foregroundColor="red" halign="center" />
-        <widget name="key_green" position="205,265" size="150,38" font="Regular;22" foregroundColor="green" halign="center" />
-        <widget name="key_yellow" position="375,265" size="150,38" font="Regular;22" foregroundColor="yellow" halign="center" />
-        <widget name="key_blue" position="545,265" size="180,38" font="Regular;22" foregroundColor="blue" halign="center" />
+    <screen name="E2XrayMain" position="center,center" size="760,520" title="e2xray">
+        <widget name="internet_label" position="85,40" size="235,42" font="Regular;26" />
+        <widget name="lamp" position="330,42" size="38,38" font="Regular;32" />
+        <widget name="internet_msg" position="385,40" size="290,42" font="Regular;26" />
+        <widget name="configuration_label" position="85,105" size="590,38" font="Regular;24" />
+        <widget name="profiles" position="85,148" size="590,252" scrollbarMode="showOnDemand" />
+        <widget name="key_red" position="35,455" size="150,38" font="Regular;22" foregroundColor="red" halign="center" />
+        <widget name="key_green" position="205,455" size="150,38" font="Regular;22" foregroundColor="green" halign="center" />
+        <widget name="key_yellow" position="375,455" size="150,38" font="Regular;22" foregroundColor="yellow" halign="center" />
+        <widget name="key_blue" position="545,455" size="180,38" font="Regular;22" foregroundColor="blue" halign="center" />
     </screen>"""
 
     def __init__(self, session):
@@ -182,14 +236,19 @@ class E2XrayMain(Screen):
         self["internet_label"] = Label("")
         self["lamp"] = Label("●")
         self["internet_msg"] = Label("")
+        self["configuration_label"] = Label("")
+        self["profiles"] = E2XrayProfileList()
         self["key_red"] = Label("")
         self["key_green"] = Label("")
         self["key_yellow"] = Label("")
         self["key_blue"] = Label("")
         self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions"],
+            ["OkCancelActions", "ColorActions", "DirectionActions"],
             {
                 "cancel": self.close,
+                "ok": self.selectHighlighted,
+                "up": self["profiles"].up,
+                "down": self["profiles"].down,
                 "green": self.start,
                 "red": self.stop,
                 "yellow": self.ping,
@@ -200,12 +259,14 @@ class E2XrayMain(Screen):
         self.onLayoutFinish.append(self.firstRun)
 
     def firstRun(self):
+        self.reloadProfiles()
         self.refreshText()
         self.runCtl("internet", "internet")
 
     def refreshText(self):
         self["internet_label"].setText(tr("internet"))
         self["internet_msg"].setText(tr(self.internet_state))
+        self["configuration_label"].setText(tr("configurations"))
         self["key_red"].setText(tr("stop"))
         self["key_green"].setText(tr("start"))
         self["key_yellow"].setText(tr("ping"))
@@ -241,6 +302,8 @@ class E2XrayMain(Screen):
                 self.session.open(MessageBox, tr("ping_failed"), MessageBox.TYPE_ERROR, timeout=7)
         elif action == "start" and "E2XRAY_ERROR=NO_CONFIG" in output:
             self.session.open(MessageBox, tr("no_config"), MessageBox.TYPE_ERROR, timeout=7)
+        if action in ("start", "stop"):
+            self.reloadProfiles()
 
     def setInternet(self, state, color):
         colors = {"green": "00cc44", "yellow": "ffd000", "red": "ff3030"}
@@ -260,33 +323,114 @@ class E2XrayMain(Screen):
         self.current_action = action
         self.container.execute("%s %s" % (CTL, argument))
 
+    def reloadProfiles(self, preferred_id=None):
+        try:
+            profiles = read_profiles(USERCONF)
+            selected = select_profile(profiles, SELECTION)
+            if read_selection(SELECTION) != selected["PROFILE_ID"]:
+                write_selection(SELECTION, selected["PROFILE_ID"])
+        except (IOError, OSError, ValueError):
+            profiles = []
+            selected = None
+
+        active_id = activeProfileId()
+        selected_id = selected["PROFILE_ID"] if selected else ""
+        rows = []
+        current_index = 0
+        for index, profile in enumerate(profiles):
+            row = dict(profile)
+            if profile["PROFILE_ID"] == active_id:
+                row["_MARK"] = u"✓"
+            elif profile["PROFILE_ID"] == selected_id:
+                row["_MARK"] = "X"
+            else:
+                row["_MARK"] = ""
+            rows.append(row)
+            target_id = preferred_id or selected_id
+            if profile["PROFILE_ID"] == target_id:
+                current_index = index
+
+        if not rows:
+            rows = [{"PROFILE_ID": "", "PROFILE_NAME": tr("no_config"), "_MARK": ""}]
+        self["profiles"].setProfiles(rows, current_index)
+
+    def currentProfile(self):
+        profile = self["profiles"].getCurrent()
+        if isinstance(profile, (list, tuple)) and profile:
+            profile = profile[0]
+        if not profile or not profile.get("PROFILE_ID"):
+            return None
+        return profile
+
+    def chooseProfile(self, show_error=True):
+        profile = self.currentProfile()
+        if not profile:
+            if show_error:
+                self.session.open(
+                    MessageBox,
+                    tr("no_config"),
+                    MessageBox.TYPE_ERROR,
+                    timeout=7,
+                )
+            return False
+        active_id = activeProfileId()
+        if active_id and active_id != profile["PROFILE_ID"]:
+            if show_error:
+                self.session.open(
+                    MessageBox,
+                    tr("stop_before_change"),
+                    MessageBox.TYPE_ERROR,
+                    timeout=7,
+                )
+            self.reloadProfiles(active_id)
+            return False
+        try:
+            write_selection(SELECTION, profile["PROFILE_ID"])
+        except (IOError, OSError, ValueError):
+            if show_error:
+                self.session.open(
+                    MessageBox,
+                    tr("invalid_config"),
+                    MessageBox.TYPE_ERROR,
+                    timeout=7,
+                )
+            return False
+        self.reloadProfiles(profile["PROFILE_ID"])
+        return True
+
+    def selectHighlighted(self):
+        self.chooseProfile()
+
     def start(self):
-        self.runCtl("start", "start")
+        if self.chooseProfile():
+            self.runCtl("start", "start")
 
     def stop(self):
         self.runCtl("stop", "stop")
 
     def ping(self):
-        self.runCtl("ping", "ping")
+        if self.chooseProfile():
+            self.runCtl("ping", "ping")
 
     def settings(self):
         self.session.openWithCallback(self.settingsClosed, E2XraySettingsMenu)
 
     def settingsClosed(self, *args):
+        self.reloadProfiles()
         self.refreshText()
         self.runCtl("internet", "internet")
 
 
 class E2XraySettingsMenu(Screen):
     skin = """
-    <screen name="E2XraySettingsMenu" position="center,center" size="650,390" title="e2xray">
-        <widget name="menu" position="30,35" size="590,270" scrollbarMode="showOnDemand" />
-        <widget name="key_red" position="35,330" size="170,38" font="Regular;22" foregroundColor="red" />
+    <screen name="E2XraySettingsMenu" position="center,center" size="650,320" title="e2xray">
+        <widget name="menu" position="30,35" size="590,205" scrollbarMode="showOnDemand" />
+        <widget name="key_red" position="35,260" size="170,38" font="Regular;22" foregroundColor="red" />
     </screen>"""
 
     def __init__(self, session):
         Screen.__init__(self, session)
-        self.labels = [tr("language"), tr("config_entry"), tr("about")]
+        self.labels = [tr("language"), tr("about")]
         self["menu"] = MenuList(self.labels)
         self["key_red"] = Label(tr("close"))
         self["actions"] = ActionMap(
@@ -297,8 +441,6 @@ class E2XraySettingsMenu(Screen):
                 "red": self.close,
                 "up": self["menu"].up,
                 "down": self["menu"].down,
-                "left": self["menu"].pageUp,
-                "right": self["menu"].pageDown,
             },
             -1,
         )
@@ -308,12 +450,10 @@ class E2XraySettingsMenu(Screen):
         if current == self.labels[0]:
             self.session.openWithCallback(self.refresh, E2XrayLanguage)
         elif current == self.labels[1]:
-            self.session.open(E2XrayConfigEntry)
-        elif current == self.labels[2]:
             self.session.open(E2XrayAbout)
 
     def refresh(self, *args):
-        self.labels = [tr("language"), tr("config_entry"), tr("about")]
+        self.labels = [tr("language"), tr("about")]
         self["menu"].setList(self.labels)
         self["key_red"].setText(tr("close"))
 
@@ -349,110 +489,6 @@ class E2XrayLanguage(Screen, ConfigListScreen):
 
     def cancel(self):
         config.plugins.e2xray.ui_language.cancel()
-        self.close(False)
-
-
-class E2XrayConfigEntry(Screen, ConfigListScreen):
-    skin = """
-    <screen name="E2XrayConfigEntry" position="center,center" size="780,280" title="e2xray">
-        <widget name="config" position="40,35" size="700,145" scrollbarMode="showOnDemand" />
-        <widget name="key_red" position="60,215" size="170,38" font="Regular;22" foregroundColor="red" />
-        <widget name="key_green" position="550,215" size="170,38" font="Regular;22" foregroundColor="green" halign="right" />
-    </screen>"""
-
-    def __init__(self, session):
-        Screen.__init__(self, session)
-        self.entry = config.plugins.e2xray.config_entry
-        self.entry.value = readShareLink()
-        self.list = [getConfigListEntry(tr("config_entry"), self.entry)]
-        self.active_setting = None
-        ConfigListScreen.__init__(self, self.list, session=session)
-        try:
-            self["config"].l.setSeperation(210)
-        except Exception:
-            pass
-        self["key_red"] = Label(tr("cancel"))
-        self["key_green"] = Label(tr("save"))
-        self["actions"] = ActionMap(
-            ["OkCancelActions", "ColorActions"],
-            {
-                "cancel": self.cancel,
-                "red": self.cancel,
-                "green": self.save,
-                "ok": self.openKeyboard,
-            },
-            -1,
-        )
-
-    def openKeyboard(self):
-        current = self["config"].getCurrent()
-        if not current or len(current) < 2:
-            return
-        setting = current[1]
-        if not isinstance(setting, ConfigText):
-            return
-        self.active_setting = setting
-        self.session.openWithCallback(
-            self.keyboardClosed,
-            VirtualKeyBoard,
-            title=current[0],
-            text=setting.value,
-        )
-
-    def keyboardClosed(self, value):
-        setting = self.active_setting
-        self.active_setting = None
-        if value is None or setting is None:
-            return
-        setting.value = value.strip()
-        if setting.value:
-            try:
-                parse_share_link(setting.value)
-            except ValueError:
-                self.session.open(
-                    MessageBox,
-                    tr("invalid_config"),
-                    MessageBox.TYPE_ERROR,
-                    timeout=8,
-                )
-        try:
-            self["config"].invalidateCurrent()
-        except Exception:
-            pass
-
-    def save(self):
-        try:
-            entry = self.entry.value.strip()
-            if not entry:
-                raise ValueError("empty")
-            parse_share_link(entry)
-            writeShareLink(entry)
-            self.entry.save()
-            configfile.save()
-        except ValueError:
-            self.session.open(MessageBox, tr("invalid_config"), MessageBox.TYPE_ERROR, timeout=8)
-            return
-        except Exception as error:
-            self.session.open(
-                MessageBox,
-                tr("save_error") % error,
-                MessageBox.TYPE_ERROR,
-                timeout=8,
-            )
-            return
-        self.session.openWithCallback(
-            self.savedMessageClosed,
-            MessageBox,
-            tr("config_saved"),
-            MessageBox.TYPE_INFO,
-            timeout=5,
-        )
-
-    def savedMessageClosed(self, *args):
-        self.close(True)
-
-    def cancel(self):
-        self.entry.cancel()
         self.close(False)
 
 

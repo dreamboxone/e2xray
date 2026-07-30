@@ -5,10 +5,12 @@ BASE="/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 XRAY="/usr/lib/e2xray/bin/xray"
 CONF="/etc/e2xray/config.json"
 USERCONF="/root/config.txt"
+SELECTION="/etc/e2xray/selected"
 PARSER="$BASE/proxy_config.py"
 RUNTIME="/var/run/e2xray"
 PARSED_USERCONF="$RUNTIME/user.conf"
 PIDFILE="$RUNTIME/xray.pid"
+ACTIVE_PROFILE="$RUNTIME/active_profile"
 STATE="$RUNTIME/state"
 LOG="/tmp/e2xray.log"
 RESOLV="/etc/resolv.conf"
@@ -28,6 +30,8 @@ log() {
 }
 
 load_userconf() {
+    PROFILE_ID=""
+    PROFILE_NAME=""
     PROTOCOL=""
     SERVER_ADDRESS=""
     SERVER_PORT=""
@@ -46,7 +50,8 @@ load_userconf() {
     fi
 
     rm -f "$PARSED_USERCONF"
-    "$PYTHON" "$PARSER" "$USERCONF" "$PARSED_USERCONF" "$CONF" >> "$LOG" 2>&1 ||
+    "$PYTHON" "$PARSER" "$USERCONF" "$SELECTION" \
+        "$PARSED_USERCONF" "$CONF" >> "$LOG" 2>&1 ||
         return 1
     . "$PARSED_USERCONF"
 }
@@ -80,6 +85,7 @@ internet_status() {
 config_present() {
     [ -f "$USERCONF" ] || return 1
     load_userconf || return 1
+    [ -n "${PROFILE_ID:-}" ] || return 1
     [ -n "${PROTOCOL:-}" ] || return 1
     [ -n "${SERVER_ADDRESS:-}" ] || return 1
     [ -n "${SERVER_PORT:-}" ] || return 1
@@ -238,7 +244,7 @@ start_xray() {
     if [ -f "$PIDFILE" ] || [ -f "$RESOLV_BAK" ]; then
         restore_routes
         restore_dns
-        rm -f "$PIDFILE"
+        rm -f "$PIDFILE" "$ACTIVE_PROFILE"
     fi
     write_config >/dev/null || {
         echo "Could not write Xray configuration."
@@ -273,10 +279,12 @@ start_xray() {
         restore_routes
         restore_dns
         kill "$(cat "$PIDFILE")" 2>/dev/null || true
-        rm -f "$PIDFILE"
+        rm -f "$PIDFILE" "$ACTIVE_PROFILE"
         echo "TUN routing setup failed. Original network settings were restored."
         exit 1
     fi
+    printf '%s\n' "$PROFILE_ID" > "$ACTIVE_PROFILE"
+    chmod 600 "$ACTIVE_PROFILE" 2>/dev/null || true
     echo "e2xray started."
     internet_status
 }
@@ -289,7 +297,7 @@ stop_xray() {
         sleep 1
         is_running && kill -9 "$(cat "$PIDFILE")" 2>/dev/null || true
     fi
-    rm -f "$PIDFILE"
+    rm -f "$PIDFILE" "$ACTIVE_PROFILE"
     log "Stopped e2xray"
     echo "e2xray stopped. Routes and DNS restored."
     internet_status
