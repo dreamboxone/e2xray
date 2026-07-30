@@ -11,12 +11,15 @@ It runs an embedded Xray-core binary from:
 
 The user does not need to install Xray separately.
 
+After installation or upgrade, the package automatically restarts the Enigma2
+user interface. A full Dreambox reboot is not required.
+
 ## Download
 
 Download the ARM64 Debian package from:
 
 ```text
-https://github.com/dreamboxone/e2xray/releases/download/v0.3.2/enigma2-plugin-extensions-e2xray_0.3.2_arm64.deb
+https://github.com/dreamboxone/e2xray/releases/download/v0.3.3/enigma2-plugin-extensions-e2xray_0.3.3_arm64.deb
 ```
 
 The SHA256 checksum is published beside the package in the GitHub release notes.
@@ -30,6 +33,10 @@ build machine:
 chmod +x build.sh
 ./build.sh
 ```
+
+The build script explicitly uses gzip for the Debian control and data archives.
+This is required because the older `dpkg` shipped by OpenDreambox 2.6.0 cannot
+read `control.tar.zst` or `data.tar.zst`.
 
 ## GitHub Actions
 
@@ -76,11 +83,7 @@ Copy the package to `/tmp` on Dreambox:
 dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.3.2_arm64.deb
 ```
 
-Reboot the Dreambox after installation so Enigma2 reloads the plugin and icon:
-
-```sh
-reboot
-```
+The package restarts the Enigma2 user interface automatically after installation.
 
 ## Configuration
 
@@ -95,8 +98,12 @@ the user presses Start.
 The parsed settings are saved in:
 
 ```sh
-/etc/e2xray/server.conf
+/root/config.txt
 ```
+
+The file contains one raw `vless://` share link. It is parsed and validated
+again whenever Start or Ping is pressed. Legacy `server.conf` key/value content
+is accepted during migration but is never executed as a shell script.
 
 The generated runtime config is:
 

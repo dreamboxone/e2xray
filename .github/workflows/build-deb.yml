@@ -42,6 +42,26 @@ jobs:
           test -s "$xray"
           readelf -h "$xray" | grep -Eq 'Machine:[[:space:]]+AArch64'
 
+      - name: Validate VLESS parser
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          input="$(mktemp)"
+          output="$(mktemp)"
+          trap 'rm -f "$input" "$output"' EXIT
+          printf '%s\n' \
+            'vless://11111111-1111-4111-8111-111111111111@192.0.2.1:2096?encryption=none&security=tls&sni=example.com&fp=chrome&type=ws&host=example.com&path=%2F' \
+            > "$input"
+
+          python3 \
+            usr/lib/enigma2/python/Plugins/Extensions/e2xray/vless_config.py \
+            "$input" "$output"
+          grep -Fq "SERVER_ADDRESS='192.0.2.1'" "$output"
+          grep -Fq "SERVER_PORT='2096'" "$output"
+          grep -Fq "NETWORK='ws'" "$output"
+          grep -Fq "TRANSPORT_PATH='/'" "$output"
+
       - name: Build package
         shell: bash
         run: |
@@ -53,6 +73,16 @@ jobs:
 
           cd dist
           test -s "${{ steps.package.outputs.filename }}"
+
+          members="$(ar t "${{ steps.package.outputs.filename }}")"
+          printf '%s\n' "$members"
+          printf '%s\n' "$members" | grep -qx 'control.tar.gz'
+          printf '%s\n' "$members" | grep -qx 'data.tar.gz'
+          if printf '%s\n' "$members" | grep -q '\.zst$'; then
+            echo "The package uses zstd and is not compatible with OpenDreambox." >&2
+            exit 1
+          fi
+
           sha256sum "${{ steps.package.outputs.filename }}" \
             > "${{ steps.package.outputs.filename }}.sha256"
           dpkg-deb --info "${{ steps.package.outputs.filename }}"

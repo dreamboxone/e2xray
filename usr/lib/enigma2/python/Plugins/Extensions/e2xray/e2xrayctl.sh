@@ -4,8 +4,10 @@ set -u
 BASE="/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 XRAY="/usr/lib/e2xray/bin/xray"
 CONF="/etc/e2xray/config.json"
-USERCONF="/etc/e2xray/server.conf"
+USERCONF="/root/config.txt"
+PARSER="$BASE/vless_config.py"
 RUNTIME="/var/run/e2xray"
+PARSED_USERCONF="$RUNTIME/user.conf"
 PIDFILE="$RUNTIME/xray.pid"
 STATE="$RUNTIME/state"
 LOG="/tmp/e2xray.log"
@@ -26,9 +28,36 @@ log() {
 }
 
 load_userconf() {
-    [ -f "$USERCONF" ] && . "$USERCONF"
+    SERVER_ADDRESS=""
+    SERVER_PORT=""
+    UUID=""
+    SNI=""
+    PUBLIC_KEY=""
+    SHORT_ID=""
+    FINGERPRINT=""
+    SECURITY=""
+    NETWORK=""
+    TRANSPORT_PATH=""
+    HOST=""
+    FLOW=""
     DNS1="8.8.8.8"
     DNS2="1.1.1.1"
+
+    [ -f "$USERCONF" ] || return 1
+    [ -f "$PARSER" ] || return 1
+
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON=python3
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON=python
+    else
+        return 1
+    fi
+
+    rm -f "$PARSED_USERCONF"
+    "$PYTHON" "$PARSER" "$USERCONF" "$PARSED_USERCONF" >> "$LOG" 2>&1 ||
+        return 1
+    . "$PARSED_USERCONF"
 }
 
 http_check() {
@@ -59,7 +88,7 @@ internet_status() {
 
 config_present() {
     [ -f "$USERCONF" ] || return 1
-    load_userconf
+    load_userconf || return 1
     [ -n "${SERVER_ADDRESS:-}" ] || return 1
     [ -n "${SERVER_PORT:-}" ] || return 1
     [ -n "${UUID:-}" ] || return 1
@@ -110,7 +139,7 @@ resolve_server_ips() {
 }
 
 write_config() {
-    load_userconf
+    load_userconf || return 1
     : ${SERVER_ADDRESS:=example.com}
     : ${SERVER_PORT:=443}
     : ${UUID:=00000000-0000-0000-0000-000000000000}
@@ -214,7 +243,7 @@ EOF
 }
 
 save_state() {
-    load_userconf
+    load_userconf || return 1
     route="$(find_default)"
     dev="$(default_dev)"
     gw="$(default_gw)"
@@ -297,7 +326,6 @@ is_running() {
 }
 
 start_xray() {
-    load_userconf
     if is_running; then
         echo "e2xray is already running."
         internet_status

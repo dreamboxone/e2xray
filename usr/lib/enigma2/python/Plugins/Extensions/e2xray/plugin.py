@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 
+import os
+
 try:
-    from urllib.parse import parse_qs, unquote, urlsplit
+    from urllib.parse import parse_qs, quote, unquote, urlencode, urlsplit
 except ImportError:
     from urlparse import parse_qs, urlsplit
-    from urllib import unquote
+    from urllib import quote, unquote, urlencode
 
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
@@ -33,7 +35,7 @@ PLUGIN_NAME = "e2xray"
 PLUGIN_DESCRIPTION = "Xray Client for Enigma2"
 BASE = "/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 CTL = BASE + "/e2xrayctl.sh"
-USERCONF = "/etc/e2xray/server.conf"
+USERCONF = "/root/config.txt"
 
 config.plugins.e2xray = ConfigSubsection()
 config.plugins.e2xray.ui_language = ConfigSelection(
@@ -247,33 +249,54 @@ def parseVlessEntry(value):
     return values
 
 
-def shellQuote(value):
-    return "'" + str(value).replace("'", "'\"'\"'") + "'"
+def buildVlessEntry(values):
+    address = values["SERVER_ADDRESS"]
+    if ":" in address and not address.startswith("["):
+        address = "[%s]" % address
+
+    query = [
+        ("encryption", "none"),
+        ("security", values["SECURITY"]),
+        ("type", values["NETWORK"]),
+    ]
+    if values["SNI"]:
+        query.append(("sni", values["SNI"]))
+    if values["FINGERPRINT"]:
+        query.append(("fp", values["FINGERPRINT"]))
+    if values["SECURITY"] == "reality":
+        if values["PUBLIC_KEY"]:
+            query.append(("pbk", values["PUBLIC_KEY"]))
+        if values["SHORT_ID"]:
+            query.append(("sid", values["SHORT_ID"]))
+    if values["NETWORK"] == "ws":
+        if values["HOST"]:
+            query.append(("host", values["HOST"]))
+        if values["TRANSPORT_PATH"]:
+            query.append(("path", values["TRANSPORT_PATH"]))
+    elif values["NETWORK"] == "grpc" and values["TRANSPORT_PATH"]:
+        query.append(("serviceName", values["TRANSPORT_PATH"]))
+    if values["FLOW"]:
+        query.append(("flow", values["FLOW"]))
+
+    return "vless://%s@%s:%s?%s" % (
+        quote(values["UUID"], safe=""),
+        address,
+        values["SERVER_PORT"],
+        urlencode(query),
+    )
 
 
 def writeServerConf(values):
-    order = [
-        "SERVER_ADDRESS",
-        "SERVER_PORT",
-        "UUID",
-        "SNI",
-        "PUBLIC_KEY",
-        "SHORT_ID",
-        "FINGERPRINT",
-        "SECURITY",
-        "NETWORK",
-        "TRANSPORT_PATH",
-        "HOST",
-        "FLOW",
-    ]
-    lines = ["# Written by e2xray."]
-    for key in order:
-        lines.append("%s=%s" % (key, shellQuote(values.get(key, ""))))
+    entry = buildVlessEntry(values)
     output = open(USERCONF, "w")
     try:
-        output.write("\n".join(lines) + "\n")
+        output.write(entry + "\n")
     finally:
         output.close()
+    try:
+        os.chmod(USERCONF, 0o600)
+    except OSError:
+        pass
 
 
 def configSettingMap():

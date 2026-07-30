@@ -1,11 +1,23 @@
 #!/bin/sh
 PLUGIN_DIR=/usr/lib/enigma2/python/Plugins/Extensions/e2xray
+OLD_USERCONF=/etc/e2xray/server.conf
+USERCONF=/root/config.txt
 
 rm -f "$PLUGIN_DIR/"*.pyc "$PLUGIN_DIR/"*.pyo 2>/dev/null || true
 rm -rf "$PLUGIN_DIR/__pycache__" 2>/dev/null || true
 chmod 755 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh 2>/dev/null || true
 chmod 755 /etc/init.d/e2xray 2>/dev/null || true
 chmod 755 /usr/lib/e2xray/bin/xray 2>/dev/null || true
+
+if [ -f "$OLD_USERCONF" ]; then
+    if [ ! -f "$USERCONF" ] ||
+        ! grep -Eq '^[[:space:]]*vless://' "$USERCONF"; then
+        cp "$OLD_USERCONF" "$USERCONF"
+    fi
+    rm -f "$OLD_USERCONF"
+fi
+chmod 600 "$USERCONF" 2>/dev/null || true
+
 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh stop >/dev/null 2>&1 || true
 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh install-init >/dev/null 2>&1 || true
 
