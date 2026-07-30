@@ -58,16 +58,16 @@ load_userconf() {
 
 http_check() {
     url="$1"
-    if command -v wget >/dev/null 2>&1; then
-        wget -q --spider --no-check-certificate -T 8 "$url" >/dev/null 2>&1
-        [ $? -eq 0 ] && return 0
-    fi
     if command -v curl >/dev/null 2>&1; then
-        curl -k -L --max-time 8 -I "$url" >/dev/null 2>&1
-        [ $? -eq 0 ] && return 0
+        curl -k -L --connect-timeout 3 --max-time 5 -I "$url" >/dev/null 2>&1
+        return $?
+    fi
+    if command -v wget >/dev/null 2>&1; then
+        wget -q --spider --no-check-certificate -T 5 "$url" >/dev/null 2>&1
+        return $?
     fi
     host="$(echo "$url" | sed 's#https://##;s#/.*##')"
-    ping -c 1 -W 4 "$host" >/dev/null 2>&1
+    ping -c 1 -W 3 "$host" >/dev/null 2>&1
 }
 
 internet_status() {
@@ -174,7 +174,6 @@ write_config() {
 }
 
 save_state() {
-    load_userconf || return 1
     route="$(find_default)"
     dev="$(default_dev)"
     gw="$(default_gw)"
@@ -256,6 +255,17 @@ is_running() {
     [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
 }
 
+wait_for_tun() {
+    attempts=0
+    while [ "$attempts" -lt 5 ]; do
+        is_running || return 1
+        [ -e "/sys/class/net/$IFACE" ] && return 0
+        sleep 1
+        attempts=$((attempts + 1))
+    done
+    is_running && [ -e "/sys/class/net/$IFACE" ]
+}
+
 start_xray() {
     if is_running; then
         echo "e2xray is already running."
@@ -278,14 +288,6 @@ start_xray() {
         restore_dns
         rm -f "$PIDFILE" "$ACTIVE_PROFILE"
     fi
-    write_config >/dev/null || {
-        echo "Could not write Xray configuration."
-        exit 1
-    }
-    "$XRAY" run -test -c "$CONF" >> "$LOG" 2>&1 || {
-        echo "Xray config test failed. See $LOG"
-        exit 1
-    }
     save_state
     . "$STATE"
     if [ -z "${DEFAULT_DEV:-}" ] || [ -z "${SERVER_IPS:-}" ]; then
@@ -300,9 +302,10 @@ start_xray() {
     log "Starting e2xray"
     "$XRAY" run -c "$CONF" >> "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
-    sleep 2
-    if ! is_running; then
+    if ! wait_for_tun; then
         restore_dns
+        is_running && kill "$(cat "$PIDFILE")" 2>/dev/null || true
+        rm -f "$PIDFILE" "$ACTIVE_PROFILE"
         echo "Xray failed to start. See $LOG"
         exit 1
     fi

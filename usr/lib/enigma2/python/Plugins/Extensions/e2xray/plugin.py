@@ -282,11 +282,16 @@ class E2XrayMain(Screen):
         Screen.__init__(self, session)
         self.session = session
         self.container = eConsoleAppContainer()
+        self.internet_container = eConsoleAppContainer()
         self.signal_connections = [
             connectSignal(self.container.appClosed, self.commandDone),
             connectSignal(self.container.dataAvail, self.commandOutput),
+            connectSignal(self.internet_container.appClosed, self.internetDone),
+            connectSignal(self.internet_container.dataAvail, self.internetOutput),
         ]
         self.output = ""
+        self.internet_output = ""
+        self.internet_busy = False
         self.current_action = None
         self.pending_ping_id = ""
         self.ping_results = {}
@@ -319,7 +324,7 @@ class E2XrayMain(Screen):
     def firstRun(self):
         self.reloadProfiles()
         self.refreshText()
-        self.runCtl("internet", "internet")
+        self.runInternetCheck()
 
     def refreshText(self):
         self["internet_label"].setText(tr("internet"))
@@ -337,6 +342,25 @@ class E2XrayMain(Screen):
         except Exception:
             data = str(data)
         self.output += data
+
+    def internetOutput(self, data):
+        try:
+            if not isinstance(data, str):
+                data = data.decode("utf-8", "ignore")
+        except Exception:
+            data = str(data)
+        self.internet_output += data
+
+    def internetDone(self, retval):
+        output = self.internet_output
+        self.internet_output = ""
+        self.internet_busy = False
+        if "E2XRAY_NET=ONLINE" in output:
+            self.setInternet("online", "green")
+        elif "E2XRAY_NET=NATIONAL" in output:
+            self.setInternet("national", "yellow")
+        else:
+            self.setInternet("offline", "red")
 
     def commandDone(self, retval):
         output = self.output
@@ -421,7 +445,7 @@ class E2XrayMain(Screen):
         if action in ("start", "stop"):
             self.reloadProfiles()
         if refresh_internet:
-            self.runCtl("internet", "internet")
+            self.runInternetCheck()
 
     def setInternet(self, state, color):
         colors = {"green": "00cc44", "yellow": "ffd000", "red": "ff3030"}
@@ -441,6 +465,14 @@ class E2XrayMain(Screen):
         self.current_action = action
         self.container.execute("%s %s" % (CTL, argument))
 
+    def runInternetCheck(self):
+        if self.internet_busy or not fileExists(CTL):
+            return
+        self.internet_output = ""
+        self.internet_busy = True
+        if self.internet_container.execute("%s internet" % CTL) != 0:
+            self.internet_busy = False
+
     def reloadProfiles(self, preferred_id=None):
         try:
             profiles = read_profiles(USERCONF)
@@ -459,7 +491,8 @@ class E2XrayMain(Screen):
         for index, profile in enumerate(profiles):
             row = dict(profile)
             if profile["PROFILE_ID"] == active_id:
-                row["_MARK"] = u"✓"
+                # The skin font on some Dreambox images has no Unicode check glyph.
+                row["_MARK"] = "V"
             elif profile["PROFILE_ID"] == selected_id:
                 row["_MARK"] = "X"
             else:
@@ -571,7 +604,7 @@ class E2XrayMain(Screen):
     def settingsClosed(self, *args):
         self.reloadProfiles()
         self.refreshText()
-        self.runCtl("internet", "internet")
+        self.runInternetCheck()
 
 
 class E2XraySettingsMenu(Screen):
