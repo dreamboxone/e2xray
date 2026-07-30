@@ -538,7 +538,7 @@ class E2XraySettingsMenu(Screen):
 class E2XrayLanguage(Screen, ConfigListScreen):
     skin = """
     <screen name="E2XrayLanguage" position="center,center" size="680,280" title="e2xray">
-        <widget name="config" position="60,35" size="440,145" scrollbarMode="showOnDemand" />
+        <widget name="config" position="40,35" size="600,145" scrollbarMode="showOnDemand" />
         <widget name="key_red" position="60,215" size="170,38" font="Regular;22" foregroundColor="red" />
         <widget name="key_green" position="450,215" size="170,38" font="Regular;22" foregroundColor="green" halign="right" />
     </screen>"""
@@ -547,6 +547,10 @@ class E2XrayLanguage(Screen, ConfigListScreen):
         Screen.__init__(self, session)
         self.list = [getConfigListEntry(tr("language"), config.plugins.e2xray.ui_language)]
         ConfigListScreen.__init__(self, self.list, session=session)
+        try:
+            self["config"].l.setSeperation(230)
+        except Exception:
+            pass
         self["key_red"] = Label(tr("cancel"))
         self["key_green"] = Label(tr("save"))
         self["actions"] = ActionMap(
