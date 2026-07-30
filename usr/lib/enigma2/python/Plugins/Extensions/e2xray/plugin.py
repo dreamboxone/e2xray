@@ -27,10 +27,10 @@ from Components.config import (
 from Tools.Directories import fileExists
 from enigma import eConsoleAppContainer
 from skin import parseColor
+from . import PLUGIN_VERSION
 
 PLUGIN_NAME = "e2xray"
 PLUGIN_DESCRIPTION = "Xray Client for Enigma2"
-PLUGIN_VERSION = "0.3.2"
 BASE = "/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 CTL = BASE + "/e2xrayctl.sh"
 USERCONF = "/etc/e2xray/server.conf"
