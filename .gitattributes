@@ -2,12 +2,16 @@
 
 *.sh text eol=lf
 *.py text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
 DEBIAN/control text eol=lf
 DEBIAN/conffiles text eol=lf
 DEBIAN/postinst text eol=lf
 DEBIAN/prerm text eol=lf
+DEBIAN/postrm text eol=lf
 etc/init.d/e2xray text eol=lf
 root/config.txt text eol=lf
+cores/SHA256SUMS text eol=lf
 
 *.png binary
-usr/lib/e2xray/bin/xray binary
+cores/*/xray binary

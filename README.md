@@ -4,13 +4,27 @@ e2xray is an Xray client for Enigma2 receivers. It routes the receiver's
 traffic through an Xray TUN interface and provides Start, Stop, Ping, status,
 configuration selection and settings from the Enigma2 user interface.
 
-The DEB contains the official Xray-core `v26.5.9` Linux ARM64 binary. Users do
-not need to install Xray-core or download additional packages from the
-Internet.
+The architecture-specific DEBs contain the official Xray-core `v26.5.9`
+binary. Users do not need to install Xray-core or download additional packages
+from the Internet.
 
-> **Compatibility:** this package is built for **64-bit ARM (`arm64` /
-> `aarch64`)** receivers and has been tested on Dreambox One UHD with
-> OpenDreambox 2.6.0. Do not install it on MIPS, ARM32 or x86 receivers.
+## Compatibility
+
+| Receiver family | DreamOS | Kernel reports | DEB architecture |
+| --- | --- | --- | --- |
+| Dreambox One / Two | OpenDreambox 2.6 | `aarch64` | `arm64` |
+| DM520 / DM525 | OpenDreambox 2.5 | `mips` | `mipsel` |
+
+The `mipsel` package contains the official little-endian
+`Xray-linux-mips32le` core. In particular, a DM525 can report `mips` from
+`uname -m` while `dpkg --print-architecture` correctly reports `mipsel`.
+
+Do not install either package on ARM32, x86 or an Enigma2 image that does not
+use `dpkg`.
+
+The ARM64 build has been tested on Dreambox One. The MIPS little-endian build
+targets DM525/OpenDreambox 2.5 and is statically validated in GitHub Actions;
+an on-receiver test is still required for final runtime confirmation.
 
 ## Features
 
@@ -27,7 +41,7 @@ Internet.
 - Embedded DNS defaults: `8.8.8.8` and `1.1.1.1`
 - Direct routes for the proxy server to prevent routing loops
 - DNS and policy-routing restoration when e2xray stops
-- Embedded ARM64 Xray-core with no online installation dependency
+- Embedded architecture-matched Xray-core with no online installation dependency
 
 e2xray is **stopped by default** after installation and after boot. It starts
 only when the user selects a configuration and presses **Start**.
@@ -37,7 +51,7 @@ only when the user selects a configuration and presses **Start**.
 Before installation, confirm that:
 
 - The receiver runs Enigma2 and installs packages with `dpkg`.
-- The CPU architecture is `aarch64` or `arm64`.
+- `dpkg --print-architecture` reports `arm64` or `mipsel`.
 - `/dev/net/tun` exists.
 - You have a valid VLESS, VMess, Trojan or Shadowsocks share link.
 
@@ -45,26 +59,36 @@ Run these commands over SSH:
 
 ```sh
 uname -m
+dpkg --print-architecture
 ls -l /dev/net/tun
 ```
 
-The expected architecture is:
+Typical output is one of:
 
 ```text
 aarch64
+arm64
+```
+
+or on a DM525:
+
+```text
+mips
+mipsel
 ```
 
 No separate Xray-core installation is required.
 
 ## Download
 
-Download the latest ARM64 DEB from the
+Download the DEB matching `dpkg --print-architecture` from the
 [e2xray Releases page](https://github.com/dreamboxone/e2xray/releases).
 
-The version `0.5.9` package name is:
+Version `0.6.0` produces two packages:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
+enigma2-plugin-extensions-e2xray_0.6.0_arm64.deb
+enigma2-plugin-extensions-e2xray_0.6.0_mipsel.deb
 ```
 
 ## Installation
@@ -77,18 +101,28 @@ file manager.
 Example from Windows PowerShell:
 
 ```powershell
-scp .\enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb root@RECEIVER_IP:/tmp/
+scp .\enigma2-plugin-extensions-e2xray_0.6.0_arm64.deb root@RECEIVER_IP:/tmp/
 ```
 
-Replace `RECEIVER_IP` with the receiver's IP address.
+For a MIPS receiver, use the `_mipsel.deb` filename instead. Replace
+`RECEIVER_IP` with the receiver's IP address.
 
 ### 2. Install over SSH
 
-Connect to the receiver and run:
+On Dreambox One/Two:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.0_arm64.deb
 ```
+
+On DM520/DM525:
+
+```sh
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.0_mipsel.deb
+```
+
+The installer verifies that its embedded Xray binary can run on the receiver
+before restarting Enigma2.
 
 At the end of installation, the terminal displays:
 
@@ -160,7 +194,19 @@ curl -4 --connect-timeout 5 --max-time 15 https://api.ipify.org ; echo
 فایل DEB را در مسیر `/tmp` ریسیور کپی کنید و دستور زیر را اجرا کنید:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
+dpkg --print-architecture
+```
+
+برای Dreambox One/Two:
+
+```sh
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.0_arm64.deb
+```
+
+برای DM520/DM525:
+
+```sh
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.0_mipsel.deb
 ```
 
 پس از نصب، رابط Enigma2 خودکار راه‌اندازی مجدد می‌شود. کانفیگ‌ها را به‌صورت
@@ -177,7 +223,7 @@ Start را بزنید. هسته Xray داخل بسته قرار دارد و نص
 | `/etc/e2xray/selected` | Selected profile ID |
 | `/tmp/e2xray.log` | Service and Xray log |
 | `/var/run/e2xray/` | Runtime state and backups |
-| `/usr/lib/e2xray/bin/xray` | Embedded ARM64 Xray core |
+| `/usr/lib/e2xray/bin/xray` | Embedded core matching the DEB architecture |
 
 ## Troubleshooting
 
@@ -236,11 +282,12 @@ The existing `/root/config.txt` is preserved during a normal upgrade.
 Upload the newer DEB to `/tmp`, then run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_NEW_VERSION_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_NEW_VERSION_ARCH.deb
 ```
 
 The installer stops the old service, installs the new files and restarts the
-Enigma2 user interface automatically.
+Enigma2 user interface automatically. Keep using the same architecture shown
+by `dpkg --print-architecture`.
 
 ## Uninstalling
 
@@ -263,30 +310,38 @@ the Enigma2 user interface.
 
 ## Building the DEB
 
-On Debian or Ubuntu:
+On Debian or Ubuntu, build ARM64:
 
 ```sh
 chmod +x build.sh
-./build.sh
+./build.sh arm64
 ```
 
-The output is:
+Build MIPS little-endian:
+
+```sh
+./build.sh mipsel
+```
+
+The outputs are:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
+enigma2-plugin-extensions-e2xray_0.6.0_arm64.deb
+enigma2-plugin-extensions-e2xray_0.6.0_mipsel.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
 because the older `dpkg` in OpenDreambox 2.6.0 cannot read zstd-compressed
 Debian archive members.
 
-GitHub Actions can build the package from:
+GitHub Actions builds both packages from a single run:
 
 ```text
-Actions > Build Debian package > Run workflow
+Actions > Build Debian packages > Run workflow
 ```
 
-The workflow artifact contains the DEB and its SHA256 file.
+The run produces separate `arm64` and `mipsel` artifacts. Each artifact
+contains its DEB and SHA256 file.
 
 ## TUN Safety
 

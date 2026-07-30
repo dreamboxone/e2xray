@@ -9,6 +9,13 @@ chmod 755 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh 2>/dev/
 chmod 755 /etc/init.d/e2xray 2>/dev/null || true
 chmod 755 /usr/lib/e2xray/bin/xray 2>/dev/null || true
 
+if ! /usr/lib/e2xray/bin/xray version >/dev/null 2>&1; then
+    echo "e2xray: the embedded Xray core cannot run on this receiver." >&2
+    echo "Receiver kernel architecture: $(uname -m 2>/dev/null || echo unknown)" >&2
+    echo "Install the DEB matching dpkg --print-architecture." >&2
+    exit 1
+fi
+
 if [ -f "$OLD_USERCONF" ]; then
     if [ ! -f "$USERCONF" ] ||
         ! grep -Eiq '^[[:space:]]*(vless|vmess|trojan|ss)://' "$USERCONF"; then
