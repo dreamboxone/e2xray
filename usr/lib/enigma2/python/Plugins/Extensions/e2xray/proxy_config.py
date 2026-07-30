@@ -189,6 +189,15 @@ def common_stream(values):
             xhttp["host"] = host
         if mode:
             xhttp["mode"] = mode
+        extra = first_value(values, ("extra",), "")
+        if extra:
+            try:
+                extra_settings = json.loads(extra)
+            except Exception:
+                raise ValueError("invalid XHTTP extra settings")
+            if not isinstance(extra_settings, dict):
+                raise ValueError("XHTTP extra settings must be an object")
+            xhttp["extra"] = extra_settings
         stream["xhttpSettings"] = xhttp
 
     if security == "tls":

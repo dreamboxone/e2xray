@@ -79,6 +79,24 @@ jobs:
               json.dumps(vmess).encode()
           ).decode().rstrip("=")
 
+          xhttp_link = (
+              "vless://bd146f3c-a00d-45e9-a9d4-b4c416362063"
+              "@87.107.195.57:2092?encryption=none&security=tls"
+              "&sni=servitro.alimail.ir&fp=chrome"
+              "&alpn=h2%2Chttp%2F1.1%2Ch3&insecure=0&allowInsecure=0"
+              "&type=xhttp&host=servitro.alimail.ir&path=%2F&mode=auto"
+              "&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D#2092"
+          )
+          parsed_xhttp = parser.parse_share_link(xhttp_link)
+          assert parsed_xhttp["PROFILE_NAME"] == "2092"
+          assert parsed_xhttp["outbound"]["streamSettings"]["method"] == "xhttp"
+          assert parsed_xhttp["outbound"]["streamSettings"]["tlsSettings"][
+              "alpn"
+          ] == ["h2", "http/1.1", "h3"]
+          assert parsed_xhttp["outbound"]["streamSettings"]["xhttpSettings"][
+              "extra"
+          ]["xPaddingBytes"] == "100-1000"
+
           cases = [
               (
                   "vless://11111111-1111-4111-8111-111111111111@192.0.2.1:2096"

@@ -12,6 +12,7 @@ binary, so the user does not need to download or install Xray separately.
 - VLESS, VMess, Trojan and Shadowsocks share links
 - Multiple named configurations selected directly on the main screen
 - RAW/TCP, WebSocket, gRPC and XHTTP transports where the protocol permits
+- XHTTP `mode`, `extra` and padding settings from share links
 - TLS and REALITY transport security
 - Embedded DNS defaults: `8.8.8.8` and `1.1.1.1`
 - Direct routes for the proxy server to prevent a routing loop
@@ -77,7 +78,7 @@ chmod +x build.sh
 The output is:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.5.1_arm64.deb
+enigma2-plugin-extensions-e2xray_0.5.2_arm64.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
@@ -92,7 +93,7 @@ package > Run workflow**. The artifact contains the DEB and its SHA256 file.
 Upload the DEB to `/tmp` and run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.1_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.2_arm64.deb
 ```
 
 The post-install script prints:

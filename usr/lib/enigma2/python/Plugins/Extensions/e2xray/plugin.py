@@ -10,7 +10,6 @@ from Components.ActionMap import ActionMap
 from Components.ConfigList import ConfigListScreen
 from Components.Label import Label
 from Components.MenuList import MenuList
-from Components.MultiContent import MultiContentEntryText
 from Components.Pixmap import Pixmap
 from Components.config import (
     ConfigSelection,
@@ -135,6 +134,20 @@ def tr(key):
     return TEXT.get(language, TEXT["en"]).get(key, key)
 
 
+def guiText(value):
+    if value is None:
+        return ""
+    try:
+        if isinstance(value, unicode):
+            return value.encode("utf-8")
+    except NameError:
+        if isinstance(value, bytes):
+            return value.decode("utf-8", "replace")
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
 def connectSignal(signal, callback):
     if hasattr(signal, "connect"):
         return signal.connect(callback)
@@ -177,26 +190,33 @@ class E2XrayProfileList(MenuList):
         self.l.setItemHeight(42)
 
     def buildEntry(self, profile):
-        symbol = profile.get("_MARK", "")
+        symbol = guiText(profile.get("_MARK", ""))
+        name = guiText(profile.get("PROFILE_NAME", ""))
         return [
             profile,
-            MultiContentEntryText(
-                pos=(12, 0),
-                size=(42, 42),
-                font=0,
-                flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                text=symbol,
-                color=0x0000CC44,
-                color_sel=0x0000CC44,
+            (
+                eListboxPythonMultiContent.TYPE_TEXT,
+                12,
+                0,
+                42,
+                42,
+                0,
+                RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                symbol,
+                0x0000CC44,
+                0x0000CC44,
             ),
-            MultiContentEntryText(
-                pos=(62, 0),
-                size=(505, 42),
-                font=0,
-                flags=RT_HALIGN_LEFT | RT_VALIGN_CENTER,
-                text=profile.get("PROFILE_NAME", ""),
-                color=0x00FFFFFF,
-                color_sel=0x00FFFFFF,
+            (
+                eListboxPythonMultiContent.TYPE_TEXT,
+                62,
+                0,
+                505,
+                42,
+                0,
+                RT_HALIGN_LEFT | RT_VALIGN_CENTER,
+                name,
+                0x00FFFFFF,
+                0x00FFFFFF,
             ),
         ]
 
