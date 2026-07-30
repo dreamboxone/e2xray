@@ -32,5 +32,6 @@ chmod 755 "$PROJECT_DIR/usr/lib/e2xray/bin/xray"
 chmod 755 "$PROJECT_DIR/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh"
 
 mkdir -p "$OUTPUT_DIR"
-dpkg-deb --build --root-owner-group "$PROJECT_DIR" "$OUTPUT_DIR/$PACKAGE"
+dpkg-deb --build --root-owner-group -Zgzip -z9 \
+    "$PROJECT_DIR" "$OUTPUT_DIR/$PACKAGE"
 echo "$OUTPUT_DIR/$PACKAGE"
