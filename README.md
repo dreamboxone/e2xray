@@ -1,76 +1,267 @@
 # e2xray
 
-e2xray is an Enigma2 Xray client for Dreambox One UHD, OpenDreambox 2.6.0
-and ARM64. The package embeds the official Xray-core `v26.5.9` Linux ARM64
-binary, so the user does not need to download or install Xray separately.
+e2xray is an Xray client for Enigma2 receivers. It routes the receiver's
+traffic through an Xray TUN interface and provides Start, Stop, Ping, status,
+configuration selection and settings from the Enigma2 user interface.
+
+The DEB contains the official Xray-core `v26.5.9` Linux ARM64 binary. Users do
+not need to install Xray-core or download additional packages from the
+Internet.
+
+> **Compatibility:** this package is built for **64-bit ARM (`arm64` /
+> `aarch64`)** receivers and has been tested on Dreambox One UHD with
+> OpenDreambox 2.6.0. Do not install it on MIPS, ARM32 or x86 receivers.
 
 ## Features
 
 - Full-device traffic routing through an Xray TUN interface
 - Start, Stop, Ping and Settings controls
-- Three-language success and failure messages for Start and Stop
-- OK toggles configuration selection on and off
-- Ping latency is displayed beside the selected configuration
 - English, Persian and Arabic user interfaces
 - VLESS, VMess, Trojan and Shadowsocks share links
-- Multiple named configurations selected directly on the main screen
-- UTF-8 profile names, including Persian and Arabic URL fragments
-- RAW/TCP, WebSocket, gRPC and XHTTP transports where the protocol permits
+- Multiple named configurations on the main screen
+- UTF-8 profile names, including Persian and Arabic names
+- RAW/TCP, WebSocket, gRPC and XHTTP transports where supported
 - XHTTP `mode`, `extra` and padding settings from share links
 - TLS and REALITY transport security
+- Ping latency displayed beside the selected configuration
 - Embedded DNS defaults: `8.8.8.8` and `1.1.1.1`
-- Direct routes for the proxy server to prevent a routing loop
-- DNS and policy-routing restoration when the plugin stops
-- Embedded ARM64 Xray core with no online installation dependency
+- Direct routes for the proxy server to prevent routing loops
+- DNS and policy-routing restoration when e2xray stops
+- Embedded ARM64 Xray-core with no online installation dependency
 
-The plugin is off after installation and after boot. It starts only when the
-user presses Start.
+e2xray is **stopped by default** after installation and after boot. It starts
+only when the user selects a configuration and presses **Start**.
 
-## Configuration
+## Requirements
 
-Paste one supported share link per line into:
+Before installation, confirm that:
+
+- The receiver runs Enigma2 and installs packages with `dpkg`.
+- The CPU architecture is `aarch64` or `arm64`.
+- `/dev/net/tun` exists.
+- You have a valid VLESS, VMess, Trojan or Shadowsocks share link.
+
+Run these commands over SSH:
+
+```sh
+uname -m
+ls -l /dev/net/tun
+```
+
+The expected architecture is:
+
+```text
+aarch64
+```
+
+No separate Xray-core installation is required.
+
+## Download
+
+Download the latest ARM64 DEB from the
+[e2xray Releases page](https://github.com/dreamboxone/e2xray/releases).
+
+The version `0.5.9` package name is:
+
+```text
+enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
+```
+
+## Installation
+
+### 1. Upload the package
+
+Upload the DEB to the receiver's `/tmp` directory with SCP, FTP or an Enigma2
+file manager.
+
+Example from Windows PowerShell:
+
+```powershell
+scp .\enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb root@RECEIVER_IP:/tmp/
+```
+
+Replace `RECEIVER_IP` with the receiver's IP address.
+
+### 2. Install over SSH
+
+Connect to the receiver and run:
+
+```sh
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
+```
+
+At the end of installation, the terminal displays:
+
+```text
+Now we are restarting your Enigma2
+```
+
+The Enigma2 user interface restarts automatically. A full receiver reboot is
+not required. The Xray core is already included in the DEB.
+
+### 3. Add proxy configurations
+
+Create or upload this file:
 
 ```text
 /root/config.txt
 ```
 
-Supported link prefixes:
+Put one supported share link on each line:
 
 ```text
-vless://
-vmess://
-trojan://
-ss://
+vless://...
+vmess://...
+trojan://...
+ss://...
 ```
 
-The name after `#` is URL-decoded and displayed below Internet Status on the
-main screen. VMess also uses its `ps` field when no fragment name exists.
-Move through the vertical list with Up/Down and press OK to select a profile.
-A green `X` marks the selected stopped profile; press OK on it again to clear
-the selection. A green check mark identifies the profile currently running.
-Start and Ping only use the profile carrying the `X` or running check mark.
-
-The selected profile ID is stored in:
+Example:
 
 ```text
-/etc/e2xray/selected
+vless://UUID@SERVER:443?encryption=none&security=tls&type=ws&path=%2F#My%20Server
 ```
 
-The generated Xray runtime configuration is:
+Do not add quotation marks around links. Empty lines and lines beginning with
+`#` are ignored.
 
-```text
-/etc/e2xray/config.json
+The name after `#` is URL-decoded and shown in the plugin. VMess uses its `ps`
+field when the link has no fragment name.
+
+### 4. Start e2xray
+
+1. Open **Plugin Browser > e2xray**.
+2. Move through configurations with the Up and Down keys.
+3. Press **OK** on a configuration. A green `X` marks it as selected.
+4. Press the green **Start** button.
+5. The marker changes to a green `V` while that configuration is running.
+
+Press **OK** again before starting to clear the selection. A running
+configuration must be stopped before selecting another one.
+
+### 5. Test the configuration
+
+Select a configuration and press the yellow **Ping** button. The measured
+latency is displayed in milliseconds beside its name.
+
+The Internet Status lamp uses Cloudflare:
+
+- Green: Online
+- Red: Offline
+
+To verify the public IP over SSH while e2xray is running:
+
+```sh
+curl -4 --connect-timeout 5 --max-time 15 https://api.ipify.org ; echo
 ```
 
-## Internet Status
+## Persian Quick Install
 
-- Cloudflare available: green lamp, Online
-- Cloudflare unavailable: red lamp, Offline
+فایل DEB را در مسیر `/tmp` ریسیور کپی کنید و دستور زیر را اجرا کنید:
 
-Ping checks the server address in the saved proxy link. If no valid link is
-saved, the plugin displays `No Config. Found`.
+```sh
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
+```
 
-## Build
+پس از نصب، رابط Enigma2 خودکار راه‌اندازی مجدد می‌شود. کانفیگ‌ها را به‌صورت
+یک لینک در هر خط داخل فایل `/root/config.txt` قرار دهید. سپس وارد
+`Plugin Browser > e2xray` شوید، کانفیگ را با دکمه OK انتخاب کنید و دکمه سبز
+Start را بزنید. هسته Xray داخل بسته قرار دارد و نصب جداگانه لازم نیست.
+
+## Files
+
+| Path | Purpose |
+| --- | --- |
+| `/root/config.txt` | User share links |
+| `/etc/e2xray/config.json` | Generated Xray runtime configuration |
+| `/etc/e2xray/selected` | Selected profile ID |
+| `/tmp/e2xray.log` | Service and Xray log |
+| `/var/run/e2xray/` | Runtime state and backups |
+| `/usr/lib/e2xray/bin/xray` | Embedded ARM64 Xray core |
+
+## Troubleshooting
+
+### `No Config. Found`
+
+Confirm that `/root/config.txt` exists and contains at least one supported
+share link:
+
+```sh
+sed -n '1,20p' /root/config.txt
+```
+
+### e2xray does not start
+
+Check the service status and recent log messages:
+
+```sh
+/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh status
+tail -n 100 /tmp/e2xray.log
+```
+
+Confirm that TUN is available:
+
+```sh
+ls -l /dev/net/tun
+```
+
+### Check TUN routing
+
+While e2xray is running:
+
+```sh
+ip rule show
+ip route show table 101
+ip route get 1.1.1.1
+```
+
+The route to public addresses should use `e2xray0`. The proxy server itself
+must continue to use the receiver's physical network interface.
+
+### Stop and restore networking
+
+Use the red **Stop** button in the plugin or run:
+
+```sh
+/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh stop
+```
+
+Stopping e2xray removes its policy rule and TUN interface and restores the
+saved DNS and network settings.
+
+## Updating
+
+The existing `/root/config.txt` is preserved during a normal upgrade.
+
+Upload the newer DEB to `/tmp`, then run:
+
+```sh
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_NEW_VERSION_arm64.deb
+```
+
+The installer stops the old service, installs the new files and restarts the
+Enigma2 user interface automatically.
+
+## Uninstalling
+
+Remove the plugin but preserve `/root/config.txt`:
+
+```sh
+dpkg --remove enigma2-plugin-extensions-e2xray
+```
+
+Remove the plugin and all of its configuration, including
+`/root/config.txt`:
+
+```sh
+dpkg --purge enigma2-plugin-extensions-e2xray
+```
+
+The removal script stops e2xray, restores networking, removes the embedded
+core, init links, runtime files and generated configuration, and then restarts
+the Enigma2 user interface.
+
+## Building the DEB
 
 On Debian or Ubuntu:
 
@@ -89,55 +280,49 @@ The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
 because the older `dpkg` in OpenDreambox 2.6.0 cannot read zstd-compressed
 Debian archive members.
 
-GitHub Actions can build the same package from **Actions > Build Debian
-package > Run workflow**. The artifact contains the DEB and its SHA256 file.
-
-## Install
-
-Upload the DEB to `/tmp` and run:
-
-```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.9_arm64.deb
-```
-
-The post-install script prints:
+GitHub Actions can build the package from:
 
 ```text
-Now we are restarting your Enigma2
+Actions > Build Debian package > Run workflow
 ```
 
-It then restarts the Enigma2 user interface automatically. A full Dreambox
-reboot is not required.
-
-## Uninstall
-
-To remove the package but preserve `/root/config.txt` for a later reinstall:
-
-```sh
-dpkg --remove enigma2-plugin-extensions-e2xray
-```
-
-To remove the plugin and all of its configuration:
-
-```sh
-dpkg --purge enigma2-plugin-extensions-e2xray
-```
-
-The removal script stops e2xray first, removes stale Python bytecode, the
-embedded core, init links, runtime files and generated configuration, then
-restarts the Enigma2 user interface. `purge` also deletes `/root/config.txt`.
+The workflow artifact contains the DEB and its SHA256 file.
 
 ## TUN Safety
 
-Before start, e2xray saves the current DNS, default route and reverse-path
-filter values. It resolves the proxy server before replacing the default route
-in its private policy-routing table, then keeps every resolved server IPv4
-address on the original gateway. The generated Xray config also enables
-`autoOutboundsInterface`.
+Before starting, e2xray saves the current DNS, default route and reverse-path
+filter values. It resolves the proxy server before enabling its private
+policy-routing table and keeps every resolved proxy-server IPv4 address on the
+original gateway. The generated Xray configuration binds outbound traffic to
+the original physical network interface.
 
-Stop removes the policy rule, flushes the private table, restores DNS and
-reverse-path filter values, and brings the TUN interface down. Stale state left
-by a previous crash is recovered before the next start.
+Stopping e2xray removes the policy rule, flushes table `101`, restores DNS and
+reverse-path filter values, and brings the TUN interface down. Stale state
+left by a previous crash is recovered before the next start.
+
+## Credits
+
+Special thanks to the
+[XTLS/Xray-core team and contributors](https://github.com/XTLS/Xray-core) for
+developing and maintaining Xray-core. Their work provides the networking core
+embedded in this plugin.
+
+از تیم و توسعه‌دهندگان XTLS/Xray-core برای توسعه و نگهداری هسته Xray
+صمیمانه سپاسگزاریم.
+
+e2xray is an independent Enigma2 plugin and is not an official XTLS project.
+
+## License
+
+The e2xray plugin source is released under the
+[MIT License](https://github.com/dreamboxone/e2xray/blob/main/LICENSE).
+
+The embedded Xray-core binary is distributed under the Mozilla Public License
+2.0. A copy is installed at:
+
+```text
+/usr/share/doc/enigma2-plugin-extensions-e2xray/Xray-LICENSE
+```
 
 ## Project
 
