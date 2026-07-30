@@ -23,6 +23,8 @@ try:
 except NameError:
     text_type = str
 
+PY2 = sys.version_info[0] == 2
+
 
 SUPPORTED_SCHEMES = ("vless://", "vmess://", "trojan://", "ss://")
 RUNTIME_FIELDS = (
@@ -56,8 +58,23 @@ def as_text(value):
     return text_type(value)
 
 
+def url_decode(value):
+    value = as_text(value or "")
+    if PY2:
+        # Python 2 unquotes Unicode one byte at a time. Work with bytes first,
+        # then decode the complete UTF-8 sequence so Persian/Arabic stays intact.
+        return unquote(value.encode("utf-8")).decode("utf-8", "replace")
+    return unquote(value)
+
+
+def parse_query(value):
+    if PY2 and isinstance(value, text_type):
+        value = value.encode("utf-8")
+    return parse_qs(value, keep_blank_values=True)
+
+
 def sanitize_name(value):
-    value = unquote(as_text(value or ""))
+    value = url_decode(value)
     value = value.replace("\x00", " ").replace("\r", " ").replace("\n", " ")
     value = " ".join(value.split())
     return value[:96]
@@ -87,7 +104,7 @@ def query_value(query, key, default=""):
     values = query.get(key, [])
     if not values:
         return default
-    return unquote(as_text(values[0]))
+    return url_decode(values[0])
 
 
 def first_value(mapping, keys, default=""):
@@ -173,7 +190,8 @@ def common_stream(values):
     host = first_value(values, ("host", "authority"), "")
     mode = first_value(values, ("mode",), "")
 
-    stream = {"method": transport, "security": security}
+    # The embedded Xray 26.5.9 reads streamSettings.network, not method.
+    stream = {"network": transport, "security": security}
     if transport == "websocket":
         websocket = {"path": path or "/"}
         if host:
@@ -250,7 +268,7 @@ def parsed_result(protocol, address, port, settings, stream):
 
 def uri_values(entry):
     parsed = urlsplit(entry.strip())
-    query = parse_qs(parsed.query, keep_blank_values=True)
+    query = parse_query(parsed.query)
     values = {}
     for key in query:
         values[key] = query_value(query, key)
@@ -263,7 +281,7 @@ def uri_userinfo(parsed):
     netloc = parsed.netloc.rsplit("@", 1)
     if len(netloc) != 2:
         return ""
-    return unquote(netloc[0])
+    return url_decode(netloc[0])
 
 
 def parse_vless(entry):
@@ -346,13 +364,13 @@ def split_host_port(value):
 def parse_shadowsocks(entry):
     body = entry.strip()[len("ss://") :].split("#", 1)[0]
     body, separator, query_string = body.partition("?")
-    query = parse_qs(query_string, keep_blank_values=True) if separator else {}
+    query = parse_query(query_string) if separator else {}
     if query_value(query, "plugin", ""):
         raise ValueError("Shadowsocks plugins are not supported")
 
     if "@" in body:
         credential_part, server_part = body.rsplit("@", 1)
-        decoded_credentials = unquote(credential_part)
+        decoded_credentials = url_decode(credential_part)
         if ":" not in decoded_credentials:
             decoded_credentials = decode_base64(decoded_credentials)
     else:

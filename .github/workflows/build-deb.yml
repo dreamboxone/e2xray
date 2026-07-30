@@ -42,6 +42,17 @@ jobs:
           test -s "$xray"
           readelf -h "$xray" | grep -Eq 'Machine:[[:space:]]+AArch64'
 
+      - name: Validate Internet status check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ctl="usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh"
+          plugin="usr/lib/enigma2/python/Plugins/Extensions/e2xray/plugin.py"
+          ! grep -qi 'arvancloud' "$ctl" README.md
+          ! grep -q 'E2XRAY_NET=NATIONAL' "$ctl" "$plugin"
+          grep -q 'https://dash.cloudflare.com' "$ctl"
+
       - name: Validate share-link parser
         shell: bash
         run: |
@@ -87,9 +98,23 @@ jobs:
               "&type=xhttp&host=servitro.alimail.ir&path=%2F&mode=auto"
               "&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D#2092"
           )
+          persian_name_link = (
+              "vless://6d9ffde9-6823-4cea-894a-687284ce00a8"
+              "@162.159.39.85:8443?encryption=none&security=tls"
+              "&sni=1.yekseda.workers.dev&fp=chrome"
+              "&insecure=0&allowInsecure=0&type=ws"
+              "&host=1.yekseda.workers.dev&path=%2F"
+              "#%D8%B3%D8%B1%D9%88%DB%8C%D8%B3%20%D8%B1%D8%A7%DB%8C%DA%AF%D8%A7%D9%86"
+              "%20%D9%86%D9%88%D8%A7%209"
+          )
+          assert parser.parse_share_link(persian_name_link)[
+              "PROFILE_NAME"
+          ] == "سرویس رایگان نوا 9"
+
           parsed_xhttp = parser.parse_share_link(xhttp_link)
           assert parsed_xhttp["PROFILE_NAME"] == "2092"
-          assert parsed_xhttp["outbound"]["streamSettings"]["method"] == "xhttp"
+          assert parsed_xhttp["outbound"]["streamSettings"]["network"] == "xhttp"
+          assert "method" not in parsed_xhttp["outbound"]["streamSettings"]
           assert parsed_xhttp["outbound"]["streamSettings"]["tlsSettings"][
               "alpn"
           ] == ["h2", "http/1.1", "h3"]
@@ -124,7 +149,7 @@ jobs:
               parsed = parser.parse_share_link(link)
               assert parsed["PROTOCOL"] == protocol
               assert parsed["outbound"]["protocol"] == protocol
-              assert parsed["outbound"]["streamSettings"]["method"] == method
+              assert parsed["outbound"]["streamSettings"]["network"] == method
               config = parser.build_xray_config(parsed)
               assert config["inbounds"][0]["protocol"] == "tun"
               assert config["outbounds"][0]["tag"] == "proxy"

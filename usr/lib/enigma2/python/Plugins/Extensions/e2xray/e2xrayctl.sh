@@ -18,7 +18,6 @@ RESOLV_BAK="$RUNTIME/resolv.conf.bak"
 IFACE="e2xray0"
 TUN_ADDR="10.255.0.1/30"
 TABLE="101"
-ARVAN="https://www.arvancloud.ir"
 CLOUDFLARE="https://dash.cloudflare.com"
 DNS1="8.8.8.8"
 DNS2="1.1.1.1"
@@ -71,15 +70,11 @@ http_check() {
 }
 
 internet_status() {
-    if ! http_check "$ARVAN"; then
-        echo "E2XRAY_NET=OFFLINE"
-        return 0
-    fi
     if http_check "$CLOUDFLARE"; then
         echo "E2XRAY_NET=ONLINE"
-        return 0
+    else
+        echo "E2XRAY_NET=OFFLINE"
     fi
-    echo "E2XRAY_NET=NATIONAL"
 }
 
 config_present() {

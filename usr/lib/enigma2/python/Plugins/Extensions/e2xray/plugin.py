@@ -57,7 +57,6 @@ TEXT = {
         "checking": "Checking",
         "online": "Online",
         "offline": "Offline",
-        "national": "National internet",
         "start": "Start",
         "stop": "Stop",
         "started": "VPN Started",
@@ -87,7 +86,6 @@ TEXT = {
         "checking": "در حال بررسی",
         "online": "آنلاین",
         "offline": "آفلاین",
-        "national": "اینترنت ملی",
         "start": "شروع",
         "stop": "توقف",
         "started": "کانفیگ استارت شد",
@@ -117,7 +115,6 @@ TEXT = {
         "checking": "جار الفحص",
         "online": "متصل",
         "offline": "غير متصل",
-        "national": "إنترنت محلي",
         "start": "تشغيل",
         "stop": "إيقاف",
         "started": "تم تشغيل الاتصال",
@@ -357,8 +354,6 @@ class E2XrayMain(Screen):
         self.internet_busy = False
         if "E2XRAY_NET=ONLINE" in output:
             self.setInternet("online", "green")
-        elif "E2XRAY_NET=NATIONAL" in output:
-            self.setInternet("national", "yellow")
         else:
             self.setInternet("offline", "red")
 
@@ -368,13 +363,6 @@ class E2XrayMain(Screen):
         refresh_internet = False
         self.output = ""
         self.current_action = None
-
-        if "E2XRAY_NET=ONLINE" in output:
-            self.setInternet("online", "green")
-        elif "E2XRAY_NET=NATIONAL" in output:
-            self.setInternet("national", "yellow")
-        elif "E2XRAY_NET=OFFLINE" in output:
-            self.setInternet("offline", "red")
 
         if action == "ping":
             if "E2XRAY_CONFIG_PING=NO_CONFIG" in output:
@@ -448,7 +436,7 @@ class E2XrayMain(Screen):
             self.runInternetCheck()
 
     def setInternet(self, state, color):
-        colors = {"green": "00cc44", "yellow": "ffd000", "red": "ff3030"}
+        colors = {"green": "00cc44", "red": "ff3030"}
         self.internet_state = state
         self["lamp"].setText("●")
         try:
