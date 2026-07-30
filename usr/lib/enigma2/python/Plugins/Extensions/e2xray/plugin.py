@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 
+import io
 import os
 
 try:
@@ -30,6 +31,7 @@ from Tools.Directories import fileExists
 from enigma import eConsoleAppContainer
 from skin import parseColor
 from . import PLUGIN_VERSION
+from .proxy_config import as_text, parse_share_link
 
 PLUGIN_NAME = "e2xray"
 PLUGIN_DESCRIPTION = "Xray Client for Enigma2"
@@ -56,7 +58,12 @@ config.plugins.e2xray.security = ConfigSelection(
 )
 config.plugins.e2xray.network = ConfigSelection(
     default="tcp",
-    choices=[("tcp", "TCP"), ("ws", "WebSocket"), ("grpc", "gRPC")],
+    choices=[
+        ("tcp", "TCP"),
+        ("ws", "WebSocket"),
+        ("grpc", "gRPC"),
+        ("xhttp", "XHTTP"),
+    ],
 )
 config.plugins.e2xray.path = ConfigText(default="", fixed_size=False)
 config.plugins.e2xray.host = ConfigText(default="", fixed_size=False)
@@ -92,8 +99,8 @@ TEXT = {
         "cancel": "Cancel",
         "close": "Close",
         "no_config": "No Config. Found",
-        "invalid_config": "Invalid VLESS configuration.",
-        "unsupported_config": "Only VLESS links are supported.",
+        "invalid_config": "Invalid proxy configuration.",
+        "unsupported_config": "Use a VLESS, VMess, Trojan or Shadowsocks link.",
         "config_saved": "Configuration saved.",
         "ping_ok": "Configuration server is reachable.",
         "ping_failed": "Configuration server is not reachable.",
@@ -130,8 +137,8 @@ TEXT = {
         "cancel": "انصراف",
         "close": "خروج",
         "no_config": "کانفیگی پیدا نشد",
-        "invalid_config": "کانفیگ VLESS معتبر نیست.",
-        "unsupported_config": "فقط لینک VLESS پشتیبانی می‌شود.",
+        "invalid_config": "کانفیگ پراکسی معتبر نیست.",
+        "unsupported_config": "لینک VLESS، VMess، Trojan یا Shadowsocks وارد کنید.",
         "config_saved": "کانفیگ ذخیره شد.",
         "ping_ok": "سرور کانفیگ در دسترس است.",
         "ping_failed": "سرور کانفیگ در دسترس نیست.",
@@ -168,8 +175,8 @@ TEXT = {
         "cancel": "إلغاء",
         "close": "إغلاق",
         "no_config": "لم يتم العثور على إعداد",
-        "invalid_config": "إعداد VLESS غير صالح.",
-        "unsupported_config": "روابط VLESS فقط مدعومة.",
+        "invalid_config": "إعداد البروكسي غير صالح.",
+        "unsupported_config": "أدخل رابط VLESS أو VMess أو Trojan أو Shadowsocks.",
         "config_saved": "تم حفظ الإعداد.",
         "ping_ok": "خادم الإعداد متاح.",
         "ping_failed": "خادم الإعداد غير متاح.",
@@ -224,7 +231,13 @@ def parseVlessEntry(value):
         raise ValueError("required")
     if security not in ("none", "tls", "reality"):
         raise ValueError("security")
-    if network not in ("tcp", "ws", "grpc"):
+    if network in ("raw",):
+        network = "tcp"
+    if network in ("websocket",):
+        network = "ws"
+    if network in ("splithttp", "http"):
+        network = "xhttp"
+    if network not in ("tcp", "ws", "grpc", "xhttp"):
         raise ValueError("network")
 
     values = {
@@ -275,6 +288,11 @@ def buildVlessEntry(values):
             query.append(("path", values["TRANSPORT_PATH"]))
     elif values["NETWORK"] == "grpc" and values["TRANSPORT_PATH"]:
         query.append(("serviceName", values["TRANSPORT_PATH"]))
+    elif values["NETWORK"] == "xhttp":
+        if values["HOST"]:
+            query.append(("host", values["HOST"]))
+        if values["TRANSPORT_PATH"]:
+            query.append(("path", values["TRANSPORT_PATH"]))
     if values["FLOW"]:
         query.append(("flow", values["FLOW"]))
 
@@ -287,12 +305,12 @@ def buildVlessEntry(values):
 
 
 def writeServerConf(values):
-    entry = buildVlessEntry(values)
-    output = open(USERCONF, "w")
-    try:
-        output.write(entry + "\n")
-    finally:
-        output.close()
+    writeShareLink(buildVlessEntry(values))
+
+
+def writeShareLink(entry):
+    with io.open(USERCONF, "w", encoding="utf-8") as output:
+        output.write(as_text(entry) + u"\n")
     try:
         os.chmod(USERCONF, 0o600)
     except OSError:
@@ -339,7 +357,7 @@ def manualConfigValues():
         raise ValueError("required")
     if values["SECURITY"] not in ("none", "tls", "reality"):
         raise ValueError("security")
-    if values["NETWORK"] not in ("tcp", "ws", "grpc"):
+    if values["NETWORK"] not in ("tcp", "ws", "grpc", "xhttp"):
         raise ValueError("network")
     for item in values.values():
         if "\n" in item or "\r" in item or '"' in item:
@@ -626,14 +644,9 @@ class E2XrayConfigEntry(Screen, ConfigListScreen):
         setting.value = value.strip()
         if setting is self.entry and setting.value:
             try:
-                applyParsedConfig(parseVlessEntry(setting.value))
-            except TypeError:
-                self.session.open(
-                    MessageBox,
-                    tr("unsupported_config"),
-                    MessageBox.TYPE_ERROR,
-                    timeout=8,
-                )
+                parse_share_link(setting.value)
+                if setting.value.lower().startswith("vless://"):
+                    applyParsedConfig(parseVlessEntry(setting.value))
             except ValueError:
                 self.session.open(
                     MessageBox,
@@ -641,6 +654,8 @@ class E2XrayConfigEntry(Screen, ConfigListScreen):
                     MessageBox.TYPE_ERROR,
                     timeout=8,
                 )
+        elif setting is not self.entry:
+            self.entry.value = ""
         try:
             self["config"].invalidateCurrent()
         except Exception:
@@ -648,9 +663,20 @@ class E2XrayConfigEntry(Screen, ConfigListScreen):
 
     def save(self):
         try:
-            values = manualConfigValues()
-            saveParsedConfig(values)
-            self.entry.save()
+            entry = self.entry.value.strip()
+            if entry:
+                parse_share_link(entry)
+                if entry.lower().startswith("vless://"):
+                    values = parseVlessEntry(entry)
+                    applyParsedConfig(values)
+                    for setting in configSettingMap().values():
+                        setting.save()
+                writeShareLink(entry)
+                self.entry.save()
+            else:
+                values = manualConfigValues()
+                saveParsedConfig(values)
+                self.entry.save()
             configfile.save()
         except ValueError:
             self.session.open(MessageBox, tr("invalid_config"), MessageBox.TYPE_ERROR, timeout=8)

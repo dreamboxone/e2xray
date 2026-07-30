@@ -11,7 +11,7 @@ chmod 755 /usr/lib/e2xray/bin/xray 2>/dev/null || true
 
 if [ -f "$OLD_USERCONF" ]; then
     if [ ! -f "$USERCONF" ] ||
-        ! grep -Eq '^[[:space:]]*vless://' "$USERCONF"; then
+        ! grep -Eiq '^[[:space:]]*(vless|vmess|trojan|ss)://' "$USERCONF"; then
         cp "$OLD_USERCONF" "$USERCONF"
     fi
     rm -f "$OLD_USERCONF"

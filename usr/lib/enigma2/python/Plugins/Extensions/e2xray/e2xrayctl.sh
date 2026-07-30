@@ -5,7 +5,7 @@ BASE="/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 XRAY="/usr/lib/e2xray/bin/xray"
 CONF="/etc/e2xray/config.json"
 USERCONF="/root/config.txt"
-PARSER="$BASE/vless_config.py"
+PARSER="$BASE/proxy_config.py"
 RUNTIME="/var/run/e2xray"
 PARSED_USERCONF="$RUNTIME/user.conf"
 PIDFILE="$RUNTIME/xray.pid"
@@ -28,18 +28,9 @@ log() {
 }
 
 load_userconf() {
+    PROTOCOL=""
     SERVER_ADDRESS=""
     SERVER_PORT=""
-    UUID=""
-    SNI=""
-    PUBLIC_KEY=""
-    SHORT_ID=""
-    FINGERPRINT=""
-    SECURITY=""
-    NETWORK=""
-    TRANSPORT_PATH=""
-    HOST=""
-    FLOW=""
     DNS1="8.8.8.8"
     DNS2="1.1.1.1"
 
@@ -55,7 +46,7 @@ load_userconf() {
     fi
 
     rm -f "$PARSED_USERCONF"
-    "$PYTHON" "$PARSER" "$USERCONF" "$PARSED_USERCONF" >> "$LOG" 2>&1 ||
+    "$PYTHON" "$PARSER" "$USERCONF" "$PARSED_USERCONF" "$CONF" >> "$LOG" 2>&1 ||
         return 1
     . "$PARSED_USERCONF"
 }
@@ -89,10 +80,9 @@ internet_status() {
 config_present() {
     [ -f "$USERCONF" ] || return 1
     load_userconf || return 1
+    [ -n "${PROTOCOL:-}" ] || return 1
     [ -n "${SERVER_ADDRESS:-}" ] || return 1
     [ -n "${SERVER_PORT:-}" ] || return 1
-    [ -n "${UUID:-}" ] || return 1
-    [ "$UUID" != "00000000-0000-0000-0000-000000000000" ] || return 1
     return 0
 }
 
@@ -140,106 +130,8 @@ resolve_server_ips() {
 
 write_config() {
     load_userconf || return 1
-    : ${SERVER_ADDRESS:=example.com}
-    : ${SERVER_PORT:=443}
-    : ${UUID:=00000000-0000-0000-0000-000000000000}
-    : ${SNI:=example.com}
-    : ${PUBLIC_KEY:=}
-    : ${SHORT_ID:=}
-    : ${FINGERPRINT:=chrome}
-    : ${SECURITY:=reality}
-    : ${NETWORK:=tcp}
-    : ${TRANSPORT_PATH:=}
-    : ${HOST:=}
-    : ${FLOW:=}
-
-    SECURITY_SETTINGS=""
-    case "$SECURITY" in
-        reality)
-            SECURITY_SETTINGS=', "realitySettings": {"serverName": "'"$SNI"'", "fingerprint": "'"$FINGERPRINT"'", "password": "'"$PUBLIC_KEY"'", "shortId": "'"$SHORT_ID"'"}'
-            ;;
-        tls)
-            SECURITY_SETTINGS=', "tlsSettings": {"serverName": "'"$SNI"'", "fingerprint": "'"$FINGERPRINT"'"}'
-            ;;
-        none|"")
-            SECURITY="none"
-            ;;
-        *)
-            echo "Unsupported VLESS security: $SECURITY"
-            return 1
-            ;;
-    esac
-
-    TRANSPORT_SETTINGS=""
-    case "$NETWORK" in
-        tcp) ;;
-        ws)
-            TRANSPORT_SETTINGS=', "wsSettings": {"path": "'"$TRANSPORT_PATH"'", "headers": {"Host": "'"$HOST"'"}}'
-            ;;
-        grpc)
-            TRANSPORT_SETTINGS=', "grpcSettings": {"serviceName": "'"$TRANSPORT_PATH"'" }'
-            ;;
-        *)
-            echo "Unsupported VLESS network: $NETWORK"
-            return 1
-            ;;
-    esac
-
-    cat > "$CONF" <<EOF
-{
-  "log": {"loglevel": "warning"},
-  "dns": {"servers": ["$DNS1", "$DNS2"]},
-  "inbounds": [{
-    "tag": "tun-in",
-    "protocol": "tun",
-    "settings": {
-      "name": "$IFACE",
-      "mtu": 1492,
-      "gateway": ["$TUN_ADDR"],
-      "autoOutboundsInterface": "auto"
-    }
-  }],
-  "outbounds": [{
-    "tag": "proxy",
-    "protocol": "vless",
-    "settings": {
-      "vnext": [{
-        "address": "$SERVER_ADDRESS",
-        "port": $SERVER_PORT,
-        "users": [{"id": "$UUID", "encryption": "none", "flow": "$FLOW"}]
-      }]
-    },
-    "streamSettings": {
-      "network": "$NETWORK",
-      "security": "$SECURITY"$SECURITY_SETTINGS$TRANSPORT_SETTINGS
-    }
-  }, {
-    "tag": "direct",
-    "protocol": "freedom"
-  }, {
-    "tag": "block",
-    "protocol": "blackhole"
-  }],
-  "routing": {
-    "domainStrategy": "IPIfNonMatch",
-    "rules": [{
-      "type": "field",
-      "ip": [
-        "127.0.0.0/8",
-        "10.0.0.0/8",
-        "100.64.0.0/10",
-        "169.254.0.0/16",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "224.0.0.0/4",
-        "255.255.255.255/32"
-      ],
-      "outboundTag": "direct"
-    }]
-  }
-}
-EOF
-    echo "Config written: $CONF"
+    [ -s "$CONF" ] || return 1
+    echo "$PROTOCOL config written: $CONF"
 }
 
 save_state() {

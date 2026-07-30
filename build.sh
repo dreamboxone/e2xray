@@ -24,14 +24,20 @@ if [ -z "$PACKAGE_NAME" ] || [ -z "$PACKAGE_VERSION" ] || [ -z "$PACKAGE_ARCH" ]
 fi
 
 PACKAGE="${PACKAGE_NAME}_${PACKAGE_VERSION}_${PACKAGE_ARCH}.deb"
+STAGING="$(mktemp -d)"
+trap 'rm -rf "$STAGING"' EXIT
 
-chmod 755 "$PROJECT_DIR/DEBIAN/postinst"
-chmod 755 "$PROJECT_DIR/DEBIAN/prerm"
-chmod 755 "$PROJECT_DIR/etc/init.d/e2xray"
-chmod 755 "$PROJECT_DIR/usr/lib/e2xray/bin/xray"
-chmod 755 "$PROJECT_DIR/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh"
+for directory in DEBIAN etc root usr; do
+    cp -a "$PROJECT_DIR/$directory" "$STAGING/"
+done
+
+chmod 755 "$STAGING/DEBIAN/postinst"
+chmod 755 "$STAGING/DEBIAN/prerm"
+chmod 755 "$STAGING/etc/init.d/e2xray"
+chmod 755 "$STAGING/usr/lib/e2xray/bin/xray"
+chmod 755 "$STAGING/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh"
 
 mkdir -p "$OUTPUT_DIR"
 dpkg-deb --build --root-owner-group -Zgzip -z9 \
-    "$PROJECT_DIR" "$OUTPUT_DIR/$PACKAGE"
+    "$STAGING" "$OUTPUT_DIR/$PACKAGE"
 echo "$OUTPUT_DIR/$PACKAGE"

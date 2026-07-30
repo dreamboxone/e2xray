@@ -1,1 +1,1 @@
-# Paste one VLESS share link on the next line.
+# Paste one VLESS, VMess, Trojan or Shadowsocks share link on the next line.

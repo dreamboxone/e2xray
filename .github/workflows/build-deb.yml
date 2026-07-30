@@ -42,25 +42,73 @@ jobs:
           test -s "$xray"
           readelf -h "$xray" | grep -Eq 'Machine:[[:space:]]+AArch64'
 
-      - name: Validate VLESS parser
+      - name: Validate share-link parser
         shell: bash
         run: |
           set -euo pipefail
 
-          input="$(mktemp)"
-          output="$(mktemp)"
-          trap 'rm -f "$input" "$output"' EXIT
-          printf '%s\n' \
-            'vless://11111111-1111-4111-8111-111111111111@192.0.2.1:2096?encryption=none&security=tls&sni=example.com&fp=chrome&type=ws&host=example.com&path=%2F' \
-            > "$input"
+          python3 - <<'PY'
+          import base64
+          import importlib.util
+          import json
+          from pathlib import Path
 
-          python3 \
-            usr/lib/enigma2/python/Plugins/Extensions/e2xray/vless_config.py \
-            "$input" "$output"
-          grep -Fq "SERVER_ADDRESS='192.0.2.1'" "$output"
-          grep -Fq "SERVER_PORT='2096'" "$output"
-          grep -Fq "NETWORK='ws'" "$output"
-          grep -Fq "TRANSPORT_PATH='/'" "$output"
+          parser_path = Path(
+              "usr/lib/enigma2/python/Plugins/Extensions/e2xray/proxy_config.py"
+          )
+          spec = importlib.util.spec_from_file_location("proxy_config", parser_path)
+          parser = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(parser)
+
+          vmess = {
+              "v": "2",
+              "add": "198.51.100.2",
+              "port": "443",
+              "id": "22222222-2222-4222-8222-222222222222",
+              "scy": "auto",
+              "net": "xhttp",
+              "path": "/xhttp",
+              "host": "vmess.example.com",
+              "tls": "tls",
+              "sni": "vmess.example.com",
+              "fp": "chrome",
+          }
+          vmess_link = "vmess://" + base64.urlsafe_b64encode(
+              json.dumps(vmess).encode()
+          ).decode().rstrip("=")
+
+          cases = [
+              (
+                  "vless://11111111-1111-4111-8111-111111111111@192.0.2.1:2096"
+                  "?encryption=none&security=tls&sni=example.com&fp=chrome"
+                  "&type=ws&host=example.com&path=%2F",
+                  "vless",
+                  "websocket",
+              ),
+              (vmess_link, "vmess", "xhttp"),
+              (
+                  "trojan://secret@203.0.113.3:443?security=reality"
+                  "&sni=example.org&fp=chrome&pbk=public-key&sid=abcd&type=grpc"
+                  "&serviceName=route",
+                  "trojan",
+                  "grpc",
+              ),
+              (
+                  "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ@203.0.113.4:8388",
+                  "shadowsocks",
+                  "raw",
+              ),
+          ]
+
+          for link, protocol, method in cases:
+              parsed = parser.parse_share_link(link)
+              assert parsed["PROTOCOL"] == protocol
+              assert parsed["outbound"]["protocol"] == protocol
+              assert parsed["outbound"]["streamSettings"]["method"] == method
+              config = parser.build_xray_config(parsed)
+              assert config["inbounds"][0]["protocol"] == "tun"
+              assert config["outbounds"][0]["tag"] == "proxy"
+          PY
 
       - name: Build package
         shell: bash
@@ -87,6 +135,11 @@ jobs:
             > "${{ steps.package.outputs.filename }}.sha256"
           dpkg-deb --info "${{ steps.package.outputs.filename }}"
           dpkg-deb --contents "${{ steps.package.outputs.filename }}" >/dev/null
+          if dpkg-deb --contents "${{ steps.package.outputs.filename }}" |
+              grep -Eq '/(\.github|README\.md|build\.sh)$'; then
+            echo "Development files leaked into the installable package." >&2
+            exit 1
+          fi
 
       - name: Upload package
         uses: actions/upload-artifact@v6

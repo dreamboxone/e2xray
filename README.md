@@ -1,134 +1,112 @@
 # e2xray
 
-e2xray is an Enigma2 plugin for Dreambox One UHD / OpenDreambox 2.6.0 / ARM64.
-It embeds the official Xray-core `v26.5.9` Linux ARM64 v8a binary.
+e2xray is an Enigma2 Xray client for Dreambox One UHD, OpenDreambox 2.6.0
+and ARM64. The package embeds the official Xray-core `v26.5.9` Linux ARM64
+binary, so the user does not need to download or install Xray separately.
 
-It runs an embedded Xray-core binary from:
+## Features
 
-```sh
-/usr/lib/e2xray/bin/xray
-```
+- Full-device traffic routing through an Xray TUN interface
+- Start, Stop, Ping and Settings controls
+- English, Persian and Arabic user interfaces
+- VLESS, VMess, Trojan and Shadowsocks share links
+- RAW/TCP, WebSocket, gRPC and XHTTP transports where the protocol permits
+- TLS and REALITY transport security
+- Embedded DNS defaults: `8.8.8.8` and `1.1.1.1`
+- Direct routes for the proxy server to prevent a routing loop
+- DNS and policy-routing restoration when the plugin stops
+- Embedded ARM64 Xray core with no online installation dependency
 
-The user does not need to install Xray separately.
+The plugin is off after installation and after boot. It starts only when the
+user presses Start.
 
-After installation or upgrade, the package automatically restarts the Enigma2
-user interface. A full Dreambox reboot is not required.
+## Configuration
 
-## Download
-
-Download the ARM64 Debian package from:
+Paste exactly one supported share link into:
 
 ```text
-https://github.com/dreamboxone/e2xray/releases/download/v0.3.3/enigma2-plugin-extensions-e2xray_0.3.3_arm64.deb
+/root/config.txt
 ```
 
-The SHA256 checksum is published beside the package in the GitHub release notes.
+Supported link prefixes:
+
+```text
+vless://
+vmess://
+trojan://
+ss://
+```
+
+The same links can be entered from **Settings > Config. Entry**. The manual
+fields remain available for creating a VLESS configuration. Start and Ping
+parse and validate `/root/config.txt` every time they are pressed.
+
+The generated Xray runtime configuration is:
+
+```text
+/etc/e2xray/config.json
+```
+
+## Internet Status
+
+- ArvanCloud unavailable: red lamp, Offline
+- ArvanCloud and Cloudflare available: green lamp, Online
+- ArvanCloud available but Cloudflare unavailable: yellow lamp, National internet
+
+Ping checks the server address in the saved proxy link. If no valid link is
+saved, the plugin displays `No Config. Found`.
 
 ## Build
 
-The repository is already laid out as a Debian package root. On a Debian-based
-build machine:
+On Debian or Ubuntu:
 
 ```sh
 chmod +x build.sh
 ./build.sh
 ```
 
-The build script explicitly uses gzip for the Debian control and data archives.
-This is required because the older `dpkg` shipped by OpenDreambox 2.6.0 cannot
-read `control.tar.zst` or `data.tar.zst`.
+The output is:
 
-## GitHub Actions
+```text
+enigma2-plugin-extensions-e2xray_0.4.0_arm64.deb
+```
 
-The Debian package can also be built manually from the repository:
+The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
+because the older `dpkg` in OpenDreambox 2.6.0 cannot read zstd-compressed
+Debian archive members.
 
-1. Open the **Actions** tab.
-2. Select **Build Debian package**.
-3. Select **Run workflow**.
-4. Download the generated artifact after the job completes.
-
-The artifact contains the ARM64 Debian package and its SHA256 checksum. Package
-metadata and the output filename are read from `DEBIAN/control`.
-
-## Main Screen
-
-The main plugin screen contains:
-
-- Stop
-- Start
-- Ping
-- Settings
-- Internet status / وضعیت اینترنت / حالة الإنترنت
-
-The default interface language is English. Settings contains:
-
-- Language: English, Persian or Arabic
-- Config. Entry: VLESS link import plus manual server fields
-- About: project version and Telegram, YouTube and GitHub addresses
-
-Internet status logic:
-
-- Cannot reach `https://www.arvancloud.ir`: red lamp, `آفلاین`
-- Can reach ArvanCloud and `https://dash.cloudflare.com`: green lamp, `آنلاین`
-- Can reach ArvanCloud but cannot reach Cloudflare dashboard: yellow lamp, `اینترنت ملی`
-
-Ping checks the server from the saved VLESS configuration. It reports
-`No Config. Found` when no valid configuration has been saved.
+GitHub Actions can build the same package from **Actions > Build Debian
+package > Run workflow**. The artifact contains the DEB and its SHA256 file.
 
 ## Install
 
-Copy the package to `/tmp` on Dreambox:
+Upload the DEB to `/tmp` and run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.3.2_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.4.0_arm64.deb
 ```
 
-The package restarts the Enigma2 user interface automatically after installation.
-
-## Configuration
-
-Open Settings and select Config. Entry. You can import a `vless://` share link
-or enter the server, port, UUID, SNI, public key, short ID, fingerprint,
-security, network, path, host and flow manually. Save with the green button.
-Reality, TLS, TCP, WebSocket and gRPC VLESS links are supported.
-
-e2xray is always off after installation and after boot. It starts only when
-the user presses Start.
-
-The parsed settings are saved in:
-
-```sh
-/root/config.txt
-```
-
-The file contains one raw `vless://` share link. It is parsed and validated
-again whenever Start or Ping is pressed. Legacy `server.conf` key/value content
-is accepted during migration but is never executed as a shell script.
-
-The generated runtime config is:
-
-```sh
-/etc/e2xray/config.json
-```
-
-DNS is managed internally and is not requested from the user:
+The post-install script prints:
 
 ```text
-Primary:   8.8.8.8
-Secondary: 1.1.1.1
+Now we are restarting your Enigma2
 ```
+
+It then restarts the Enigma2 user interface automatically. A full Dreambox
+reboot is not required.
 
 ## TUN Safety
 
-The control script saves current DNS and routing state before start. It uses a separate policy-routing table, preserves directly connected LAN routes, and adds direct routes for every resolved Xray server IPv4 address. Xray's official `autoOutboundsInterface` protection is enabled as an additional loop guard.
+Before start, e2xray saves the current DNS, default route and reverse-path
+filter values. It resolves the proxy server before replacing the default route
+in its private policy-routing table, then keeps every resolved server IPv4
+address on the original gateway. The generated Xray config also enables
+`autoOutboundsInterface`.
 
-On stop it restores DNS, removes the policy rule and flushes the private routing table. A stale state left by a power loss or crash is recovered before the next start.
-The original reverse-path-filter values are also saved and restored.
+Stop removes the policy rule, flushes the private table, restores DNS and
+reverse-path filter values, and brings the TUN interface down. Stale state left
+by a previous crash is recovered before the next start.
 
-## GitHub
+## Project
 
-Project repository:
-
-```text
 https://github.com/dreamboxone/e2xray
-```
