@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import base64
+import errno
 import hashlib
 import io
 import json
@@ -499,12 +500,22 @@ def write_selection(path, profile_id):
     atomic_write(path, profile_id + "\n")
 
 
-def select_profile(profiles, selection_path):
+def clear_selection(path):
+    try:
+        os.unlink(path)
+    except OSError as error:
+        if error.errno != errno.ENOENT:
+            raise
+
+
+def select_profile(profiles, selection_path, fallback=True):
     selected_id = read_selection(selection_path)
     for profile in profiles:
         if profile["PROFILE_ID"] == selected_id:
             return profile
-    return profiles[0]
+    if fallback and profiles:
+        return profiles[0]
+    return None
 
 
 def read_config(path, selection_path):
@@ -593,9 +604,9 @@ def main():
         return 2
     try:
         profiles = read_profiles(sys.argv[1])
-        parsed = select_profile(profiles, sys.argv[2])
-        if read_selection(sys.argv[2]) != parsed["PROFILE_ID"]:
-            write_selection(sys.argv[2], parsed["PROFILE_ID"])
+        parsed = select_profile(profiles, sys.argv[2], fallback=False)
+        if parsed is None:
+            raise ValueError("no configuration selected")
         write_runtime(sys.argv[3], parsed)
         write_xray_config(sys.argv[4], parsed)
     except Exception as error:

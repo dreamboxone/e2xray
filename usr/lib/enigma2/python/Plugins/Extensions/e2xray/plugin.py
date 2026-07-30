@@ -21,6 +21,7 @@ from Components.config import (
 from Tools.Directories import fileExists
 from enigma import (
     RT_HALIGN_LEFT,
+    RT_HALIGN_RIGHT,
     RT_VALIGN_CENTER,
     eConsoleAppContainer,
     eListboxPythonMultiContent,
@@ -29,9 +30,9 @@ from enigma import (
 from skin import parseColor
 from . import PLUGIN_VERSION
 from .proxy_config import (
+    clear_selection,
     read_profiles,
     read_selection,
-    select_profile,
     write_selection,
 )
 
@@ -59,8 +60,8 @@ TEXT = {
         "national": "National internet",
         "start": "Start",
         "stop": "Stop",
-        "started": "Configuration started.",
-        "stopped": "Proxy stopped.",
+        "started": "VPN Started",
+        "stopped": "VPN Stopped",
         "start_failed": "Could not start the configuration.",
         "stop_failed": "Could not stop the proxy.",
         "ping": "Ping",
@@ -72,6 +73,7 @@ TEXT = {
         "cancel": "Cancel",
         "close": "Close",
         "no_config": "No Config. Found",
+        "no_selected": "No Configuration Selected.",
         "invalid_config": "Invalid proxy configuration.",
         "stop_before_change": "Stop e2xray before changing configuration.",
         "ping_ok": "Configuration server is reachable.",
@@ -101,6 +103,7 @@ TEXT = {
         "cancel": "انصراف",
         "close": "خروج",
         "no_config": "کانفیگی پیدا نشد",
+        "no_selected": "هیچ کانفیگی انتخاب نشده",
         "invalid_config": "کانفیگ پراکسی معتبر نیست.",
         "stop_before_change": "پیش از تغییر کانفیگ، e2xray را متوقف کنید.",
         "ping_ok": "سرور کانفیگ در دسترس است.",
@@ -130,6 +133,7 @@ TEXT = {
         "cancel": "إلغاء",
         "close": "إغلاق",
         "no_config": "لم يتم العثور على إعداد",
+        "no_selected": "لم يتم اختيار أي اتصال",
         "invalid_config": "إعداد البروكسي غير صالح.",
         "stop_before_change": "أوقف e2xray قبل تغيير الاتصال.",
         "ping_ok": "خادم الإعداد متاح.",
@@ -168,6 +172,14 @@ def connectSignal(signal, callback):
         return None
     signal.append(callback)
     return None
+
+
+def outputValue(output, key):
+    prefix = key + "="
+    for line in output.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip()
+    return ""
 
 
 def coreRunning():
@@ -222,11 +234,23 @@ class E2XrayProfileList(MenuList):
                 eListboxPythonMultiContent.TYPE_TEXT,
                 62,
                 0,
-                505,
+                385,
                 42,
                 0,
                 RT_HALIGN_LEFT | RT_VALIGN_CENTER,
                 name,
+                0x00FFFFFF,
+                0x00FFFFFF,
+            ),
+            (
+                eListboxPythonMultiContent.TYPE_TEXT,
+                455,
+                0,
+                110,
+                42,
+                0,
+                RT_HALIGN_RIGHT | RT_VALIGN_CENTER,
+                guiText(profile.get("_PING", "")),
                 0x00FFFFFF,
                 0x00FFFFFF,
             ),
@@ -264,6 +288,8 @@ class E2XrayMain(Screen):
         ]
         self.output = ""
         self.current_action = None
+        self.pending_ping_id = ""
+        self.ping_results = {}
         self.internet_state = "checking"
         self["internet_label"] = Label("")
         self["lamp"] = Label("●")
@@ -328,11 +354,31 @@ class E2XrayMain(Screen):
 
         if action == "ping":
             if "E2XRAY_CONFIG_PING=NO_CONFIG" in output:
-                self.session.open(MessageBox, tr("no_config"), MessageBox.TYPE_ERROR, timeout=7)
+                self.session.open(
+                    MessageBox,
+                    tr("no_selected"),
+                    MessageBox.TYPE_ERROR,
+                    timeout=7,
+                )
             elif "E2XRAY_CONFIG_PING=OK" in output:
-                self.session.open(MessageBox, tr("ping_ok"), MessageBox.TYPE_INFO, timeout=7)
+                profile_id = outputValue(output, "E2XRAY_CONFIG_PING_ID")
+                latency = outputValue(output, "E2XRAY_CONFIG_PING_MS")
+                if profile_id and latency:
+                    self.ping_results[profile_id] = latency + "ms"
+                    self.reloadProfiles(profile_id)
+                else:
+                    self.session.open(
+                        MessageBox,
+                        tr("ping_failed"),
+                        MessageBox.TYPE_ERROR,
+                        timeout=7,
+                    )
             else:
+                if self.pending_ping_id:
+                    self.ping_results.pop(self.pending_ping_id, None)
+                    self.reloadProfiles(self.pending_ping_id)
                 self.session.open(MessageBox, tr("ping_failed"), MessageBox.TYPE_ERROR, timeout=7)
+            self.pending_ping_id = ""
         elif action == "start":
             if "E2XRAY_ERROR=NO_CONFIG" in output:
                 self.session.open(
@@ -398,15 +444,16 @@ class E2XrayMain(Screen):
     def reloadProfiles(self, preferred_id=None):
         try:
             profiles = read_profiles(USERCONF)
-            selected = select_profile(profiles, SELECTION)
-            if read_selection(SELECTION) != selected["PROFILE_ID"]:
-                write_selection(SELECTION, selected["PROFILE_ID"])
+            selected_id = read_selection(SELECTION)
+            known_ids = set(profile["PROFILE_ID"] for profile in profiles)
+            if selected_id and selected_id not in known_ids:
+                clear_selection(SELECTION)
+                selected_id = ""
         except (IOError, OSError, ValueError):
             profiles = []
-            selected = None
+            selected_id = ""
 
         active_id = activeProfileId()
-        selected_id = selected["PROFILE_ID"] if selected else ""
         rows = []
         current_index = 0
         for index, profile in enumerate(profiles):
@@ -417,13 +464,21 @@ class E2XrayMain(Screen):
                 row["_MARK"] = "X"
             else:
                 row["_MARK"] = ""
+            row["_PING"] = self.ping_results.get(profile["PROFILE_ID"], "")
             rows.append(row)
             target_id = preferred_id or selected_id
             if profile["PROFILE_ID"] == target_id:
                 current_index = index
 
         if not rows:
-            rows = [{"PROFILE_ID": "", "PROFILE_NAME": tr("no_config"), "_MARK": ""}]
+            rows = [
+                {
+                    "PROFILE_ID": "",
+                    "PROFILE_NAME": tr("no_config"),
+                    "_MARK": "",
+                    "_PING": "",
+                }
+            ]
         self["profiles"].setProfiles(rows, current_index)
 
     def currentProfile(self):
@@ -434,54 +489,80 @@ class E2XrayMain(Screen):
             return None
         return profile
 
-    def chooseProfile(self, show_error=True):
-        profile = self.currentProfile()
-        if not profile:
-            if show_error:
-                self.session.open(
-                    MessageBox,
-                    tr("no_config"),
-                    MessageBox.TYPE_ERROR,
-                    timeout=7,
-                )
-            return False
-        active_id = activeProfileId()
-        if active_id and active_id != profile["PROFILE_ID"]:
-            if show_error:
-                self.session.open(
-                    MessageBox,
-                    tr("stop_before_change"),
-                    MessageBox.TYPE_ERROR,
-                    timeout=7,
-                )
-            self.reloadProfiles(active_id)
-            return False
+    def selectedProfile(self):
+        selected_id = read_selection(SELECTION)
+        if not selected_id:
+            self.session.open(
+                MessageBox,
+                tr("no_selected"),
+                MessageBox.TYPE_ERROR,
+                timeout=7,
+            )
+            return None
         try:
-            write_selection(SELECTION, profile["PROFILE_ID"])
+            profiles = read_profiles(USERCONF)
         except (IOError, OSError, ValueError):
-            if show_error:
-                self.session.open(
-                    MessageBox,
-                    tr("invalid_config"),
-                    MessageBox.TYPE_ERROR,
-                    timeout=7,
-                )
-            return False
-        self.reloadProfiles(profile["PROFILE_ID"])
-        return True
+            self.session.open(
+                MessageBox,
+                tr("no_config"),
+                MessageBox.TYPE_ERROR,
+                timeout=7,
+            )
+            return None
+        for profile in profiles:
+            if profile["PROFILE_ID"] == selected_id:
+                return profile
+        clear_selection(SELECTION)
+        self.reloadProfiles()
+        self.session.open(
+            MessageBox,
+            tr("no_selected"),
+            MessageBox.TYPE_ERROR,
+            timeout=7,
+        )
+        return None
 
     def selectHighlighted(self):
-        self.chooseProfile()
+        profile = self.currentProfile()
+        if not profile:
+            return
+        active_id = activeProfileId()
+        if active_id:
+            self.session.open(
+                MessageBox,
+                tr("stop_before_change"),
+                MessageBox.TYPE_ERROR,
+                timeout=7,
+            )
+            self.reloadProfiles(active_id)
+            return
+        selected_id = read_selection(SELECTION)
+        try:
+            if selected_id == profile["PROFILE_ID"]:
+                clear_selection(SELECTION)
+            else:
+                write_selection(SELECTION, profile["PROFILE_ID"])
+        except (IOError, OSError, ValueError):
+            self.session.open(
+                MessageBox,
+                tr("invalid_config"),
+                MessageBox.TYPE_ERROR,
+                timeout=7,
+            )
+            return
+        self.reloadProfiles(profile["PROFILE_ID"])
 
     def start(self):
-        if self.chooseProfile():
+        if self.selectedProfile():
             self.runCtl("start", "start")
 
     def stop(self):
         self.runCtl("stop", "stop")
 
     def ping(self):
-        if self.chooseProfile():
+        profile = self.selectedProfile()
+        if profile:
+            self.pending_ping_id = profile["PROFILE_ID"]
             self.runCtl("ping", "ping")
 
     def settings(self):

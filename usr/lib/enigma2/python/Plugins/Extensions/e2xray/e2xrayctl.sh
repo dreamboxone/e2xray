@@ -97,8 +97,41 @@ ping_config() {
         echo "E2XRAY_CONFIG_PING=NO_CONFIG"
         return 0
     fi
-    if ping -c 1 -W 4 "$SERVER_ADDRESS" >/dev/null 2>&1; then
+
+    latency="$("$PYTHON" - "$SERVER_ADDRESS" "$SERVER_PORT" 2>/dev/null <<'PY'
+from __future__ import print_function
+import socket
+import sys
+import time
+
+sock = None
+try:
+    started = time.time()
+    sock = socket.create_connection((sys.argv[1], int(sys.argv[2])), 4)
+    elapsed = int(round((time.time() - started) * 1000))
+    print(max(0, elapsed))
+except Exception:
+    sys.exit(1)
+finally:
+    if sock is not None:
+        sock.close()
+PY
+)"
+    tcp_status=$?
+
+    if [ "$tcp_status" -ne 0 ] || [ -z "$latency" ]; then
+        ping_output="$(ping -c 1 -W 4 "$SERVER_ADDRESS" 2>&1)"
+        ping_status=$?
+        latency="$(printf '%s\n' "$ping_output" |
+            sed -n 's/.*time[=<]\([0-9][0-9.]*\)[[:space:]]*ms.*/\1/p' |
+            sed -n '1p')"
+        [ "$ping_status" -eq 0 ] || latency=""
+    fi
+
+    if [ -n "$latency" ]; then
         echo "E2XRAY_CONFIG_PING=OK"
+        echo "E2XRAY_CONFIG_PING_ID=$PROFILE_ID"
+        echo "E2XRAY_CONFIG_PING_MS=$latency"
     else
         echo "E2XRAY_CONFIG_PING=FAILED"
     fi

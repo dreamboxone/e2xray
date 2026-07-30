@@ -139,6 +139,11 @@ jobs:
                   encoding="utf-8",
               )
               profiles = parser.read_profiles(str(config_path))
+              assert parser.select_profile(
+                  profiles,
+                  str(selection_path),
+                  fallback=False,
+              ) is None
               assert [item["PROFILE_NAME"] for item in profiles] == [
                   "Germany 1",
                   "VMess Main",
@@ -161,6 +166,8 @@ jobs:
               assert json.loads(xray_path.read_text())["outbounds"][0][
                   "protocol"
               ] == "trojan"
+              parser.clear_selection(str(selection_path))
+              assert parser.read_selection(str(selection_path)) == ""
           PY
 
       - name: Build package

@@ -9,6 +9,8 @@ binary, so the user does not need to download or install Xray separately.
 - Full-device traffic routing through an Xray TUN interface
 - Start, Stop, Ping and Settings controls
 - Three-language success and failure messages for Start and Stop
+- OK toggles configuration selection on and off
+- Ping latency is displayed beside the selected configuration
 - English, Persian and Arabic user interfaces
 - VLESS, VMess, Trojan and Shadowsocks share links
 - Multiple named configurations selected directly on the main screen
@@ -43,8 +45,9 @@ ss://
 The name after `#` is URL-decoded and displayed below Internet Status on the
 main screen. VMess also uses its `ps` field when no fragment name exists.
 Move through the vertical list with Up/Down and press OK to select a profile.
-A green `X` marks the selected stopped profile; a green check mark identifies
-the profile currently running. Start and Ping always use the selected profile.
+A green `X` marks the selected stopped profile; press OK on it again to clear
+the selection. A green check mark identifies the profile currently running.
+Start and Ping only use the profile carrying the `X` or running check mark.
 
 The selected profile ID is stored in:
 
@@ -79,7 +82,7 @@ chmod +x build.sh
 The output is:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.5.3_arm64.deb
+enigma2-plugin-extensions-e2xray_0.5.4_arm64.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
@@ -94,7 +97,7 @@ package > Run workflow**. The artifact contains the DEB and its SHA256 file.
 Upload the DEB to `/tmp` and run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.3_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.4_arm64.deb
 ```
 
 The post-install script prints:
