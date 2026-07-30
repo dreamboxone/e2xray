@@ -1,0 +1,47 @@
+#!/bin/sh
+
+PLUGIN_DIR="/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
+CORE_DIR="/usr/lib/e2xray"
+RUNTIME_DIR="/var/run/e2xray"
+CONFIG_DIR="/etc/e2xray"
+USER_CONFIG="/root/config.txt"
+LOG_FILE="/tmp/e2xray.log"
+
+remove_init_links() {
+    if command -v update-rc.d >/dev/null 2>&1; then
+        update-rc.d -f e2xray remove >/dev/null 2>&1 || true
+    fi
+    rm -f /etc/rc?.d/S??e2xray /etc/rc?.d/K??e2xray 2>/dev/null || true
+    rm -f /etc/init.d/e2xray 2>/dev/null || true
+}
+
+restart_enigma2() {
+    (
+        sleep 3
+        if command -v systemctl >/dev/null 2>&1 &&
+            systemctl restart enigma2.service >/dev/null 2>&1; then
+            exit 0
+        fi
+
+        init 4
+        sleep 2
+        init 3
+    ) >/dev/null 2>&1 &
+}
+
+case "${1:-remove}" in
+    remove|purge|disappear)
+        remove_init_links
+        rm -rf "$PLUGIN_DIR" "$CORE_DIR" "$RUNTIME_DIR" "$CONFIG_DIR"
+        rm -f "$LOG_FILE"
+
+        if [ "${1:-}" = "purge" ]; then
+            rm -f "$USER_CONFIG" "$USER_CONFIG".dpkg-* 2>/dev/null || true
+        fi
+
+        echo "Now we are restarting your Enigma2"
+        restart_enigma2
+        ;;
+esac
+
+exit 0

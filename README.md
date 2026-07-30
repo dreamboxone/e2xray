@@ -77,7 +77,7 @@ chmod +x build.sh
 The output is:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.5.0_arm64.deb
+enigma2-plugin-extensions-e2xray_0.5.1_arm64.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
@@ -92,7 +92,7 @@ package > Run workflow**. The artifact contains the DEB and its SHA256 file.
 Upload the DEB to `/tmp` and run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.0_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.1_arm64.deb
 ```
 
 The post-install script prints:
@@ -103,6 +103,24 @@ Now we are restarting your Enigma2
 
 It then restarts the Enigma2 user interface automatically. A full Dreambox
 reboot is not required.
+
+## Uninstall
+
+To remove the package but preserve `/root/config.txt` for a later reinstall:
+
+```sh
+dpkg --remove enigma2-plugin-extensions-e2xray
+```
+
+To remove the plugin and all of its configuration:
+
+```sh
+dpkg --purge enigma2-plugin-extensions-e2xray
+```
+
+The removal script stops e2xray first, removes stale Python bytecode, the
+embedded core, init links, runtime files and generated configuration, then
+restarts the Enigma2 user interface. `purge` also deletes `/root/config.txt`.
 
 ## TUN Safety
 

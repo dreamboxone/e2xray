@@ -33,6 +33,7 @@ done
 
 chmod 755 "$STAGING/DEBIAN/postinst"
 chmod 755 "$STAGING/DEBIAN/prerm"
+chmod 755 "$STAGING/DEBIAN/postrm"
 chmod 755 "$STAGING/etc/init.d/e2xray"
 chmod 755 "$STAGING/usr/lib/e2xray/bin/xray"
 chmod 755 "$STAGING/usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh"
