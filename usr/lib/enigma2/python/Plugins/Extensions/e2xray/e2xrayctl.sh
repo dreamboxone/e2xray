@@ -226,7 +226,6 @@ is_running() {
 start_xray() {
     if is_running; then
         echo "e2xray is already running."
-        internet_status
         exit 0
     fi
     if ! config_present; then
@@ -286,7 +285,6 @@ start_xray() {
     printf '%s\n' "$PROFILE_ID" > "$ACTIVE_PROFILE"
     chmod 600 "$ACTIVE_PROFILE" 2>/dev/null || true
     echo "e2xray started."
-    internet_status
 }
 
 stop_xray() {
@@ -300,7 +298,6 @@ stop_xray() {
     rm -f "$PIDFILE" "$ACTIVE_PROFILE"
     log "Stopped e2xray"
     echo "e2xray stopped. Routes and DNS restored."
-    internet_status
 }
 
 install_init() {

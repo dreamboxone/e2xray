@@ -8,6 +8,7 @@ binary, so the user does not need to download or install Xray separately.
 
 - Full-device traffic routing through an Xray TUN interface
 - Start, Stop, Ping and Settings controls
+- Three-language success and failure messages for Start and Stop
 - English, Persian and Arabic user interfaces
 - VLESS, VMess, Trojan and Shadowsocks share links
 - Multiple named configurations selected directly on the main screen
@@ -78,7 +79,7 @@ chmod +x build.sh
 The output is:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.5.2_arm64.deb
+enigma2-plugin-extensions-e2xray_0.5.3_arm64.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
@@ -93,7 +94,7 @@ package > Run workflow**. The artifact contains the DEB and its SHA256 file.
 Upload the DEB to `/tmp` and run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.2_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.5.3_arm64.deb
 ```
 
 The post-install script prints:

@@ -59,6 +59,10 @@ TEXT = {
         "national": "National internet",
         "start": "Start",
         "stop": "Stop",
+        "started": "Configuration started.",
+        "stopped": "Proxy stopped.",
+        "start_failed": "Could not start the configuration.",
+        "stop_failed": "Could not stop the proxy.",
         "ping": "Ping",
         "settings": "Settings",
         "language": "Language",
@@ -84,6 +88,10 @@ TEXT = {
         "national": "اینترنت ملی",
         "start": "شروع",
         "stop": "توقف",
+        "started": "کانفیگ استارت شد",
+        "stopped": "فیلترشکن متوقف شد",
+        "start_failed": "کانفیگ استارت نشد",
+        "stop_failed": "فیلترشکن متوقف نشد",
         "ping": "پینگ",
         "settings": "تنظیمات",
         "language": "زبان",
@@ -109,6 +117,10 @@ TEXT = {
         "national": "إنترنت محلي",
         "start": "تشغيل",
         "stop": "إيقاف",
+        "started": "تم تشغيل الاتصال",
+        "stopped": "تم إيقاف البروكسي",
+        "start_failed": "تعذر تشغيل الاتصال",
+        "stop_failed": "تعذر إيقاف البروكسي",
         "ping": "اختبار",
         "settings": "الإعدادات",
         "language": "اللغة",
@@ -303,6 +315,7 @@ class E2XrayMain(Screen):
     def commandDone(self, retval):
         output = self.output
         action = self.current_action
+        refresh_internet = False
         self.output = ""
         self.current_action = None
 
@@ -320,10 +333,49 @@ class E2XrayMain(Screen):
                 self.session.open(MessageBox, tr("ping_ok"), MessageBox.TYPE_INFO, timeout=7)
             else:
                 self.session.open(MessageBox, tr("ping_failed"), MessageBox.TYPE_ERROR, timeout=7)
-        elif action == "start" and "E2XRAY_ERROR=NO_CONFIG" in output:
-            self.session.open(MessageBox, tr("no_config"), MessageBox.TYPE_ERROR, timeout=7)
+        elif action == "start":
+            if "E2XRAY_ERROR=NO_CONFIG" in output:
+                self.session.open(
+                    MessageBox,
+                    tr("no_config"),
+                    MessageBox.TYPE_ERROR,
+                    timeout=7,
+                )
+            elif retval == 0:
+                self.session.open(
+                    MessageBox,
+                    tr("started"),
+                    MessageBox.TYPE_INFO,
+                    timeout=5,
+                )
+                refresh_internet = True
+            else:
+                self.session.open(
+                    MessageBox,
+                    tr("start_failed"),
+                    MessageBox.TYPE_ERROR,
+                    timeout=7,
+                )
+        elif action == "stop":
+            if retval == 0:
+                self.session.open(
+                    MessageBox,
+                    tr("stopped"),
+                    MessageBox.TYPE_INFO,
+                    timeout=5,
+                )
+                refresh_internet = True
+            else:
+                self.session.open(
+                    MessageBox,
+                    tr("stop_failed"),
+                    MessageBox.TYPE_ERROR,
+                    timeout=7,
+                )
         if action in ("start", "stop"):
             self.reloadProfiles()
+        if refresh_internet:
+            self.runCtl("internet", "internet")
 
     def setInternet(self, state, color):
         colors = {"green": "00cc44", "yellow": "ffd000", "red": "ff3030"}
