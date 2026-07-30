@@ -37,9 +37,9 @@ trojan://
 ss://
 ```
 
-The same links can be entered from **Settings > Config. Entry**. The manual
-fields remain available for creating a VLESS configuration. Start and Ping
-parse and validate `/root/config.txt` every time they are pressed.
+The same links can be entered from **Settings > Config. Entry**. Paste one
+complete share link and save it with the green button. Start and Ping parse and
+validate `/root/config.txt` every time they are pressed.
 
 The generated Xray runtime configuration is:
 
@@ -68,7 +68,7 @@ chmod +x build.sh
 The output is:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.4.1_arm64.deb
+enigma2-plugin-extensions-e2xray_0.4.2_arm64.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
@@ -83,7 +83,7 @@ package > Run workflow**. The artifact contains the DEB and its SHA256 file.
 Upload the DEB to `/tmp` and run:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.4.1_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.4.2_arm64.deb
 ```
 
 The post-install script prints:

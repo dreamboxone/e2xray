@@ -4,12 +4,6 @@ from __future__ import print_function
 import io
 import os
 
-try:
-    from urllib.parse import parse_qs, quote, unquote, urlencode, urlsplit
-except ImportError:
-    from urlparse import parse_qs, urlsplit
-    from urllib import quote, unquote, urlencode
-
 from Plugins.Plugin import PluginDescriptor
 from Screens.Screen import Screen
 from Screens.MessageBox import MessageBox
@@ -45,29 +39,6 @@ config.plugins.e2xray.ui_language = ConfigSelection(
     choices=[("en", "English"), ("fa", "فارسی"), ("ar", "العربية")],
 )
 config.plugins.e2xray.config_entry = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.server = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.port = ConfigText(default="443", fixed_size=False)
-config.plugins.e2xray.uuid = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.sni = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.public_key = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.short_id = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.fingerprint = ConfigText(default="chrome", fixed_size=False)
-config.plugins.e2xray.security = ConfigSelection(
-    default="reality",
-    choices=[("reality", "Reality"), ("tls", "TLS"), ("none", "None")],
-)
-config.plugins.e2xray.network = ConfigSelection(
-    default="tcp",
-    choices=[
-        ("tcp", "TCP"),
-        ("ws", "WebSocket"),
-        ("grpc", "gRPC"),
-        ("xhttp", "XHTTP"),
-    ],
-)
-config.plugins.e2xray.path = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.host = ConfigText(default="", fixed_size=False)
-config.plugins.e2xray.flow = ConfigText(default="", fixed_size=False)
 
 TEXT = {
     "en": {
@@ -82,25 +53,12 @@ TEXT = {
         "settings": "Settings",
         "language": "Language",
         "config_entry": "Config. Entry",
-        "server": "Server",
-        "port": "Port",
-        "uuid": "UUID",
-        "sni": "SNI",
-        "public_key": "Public key",
-        "short_id": "Short ID",
-        "fingerprint": "Fingerprint",
-        "security": "Security",
-        "network": "Network",
-        "transport_path": "Path",
-        "host": "Host",
-        "flow": "Flow",
         "about": "About",
         "save": "Save",
         "cancel": "Cancel",
         "close": "Close",
         "no_config": "No Config. Found",
         "invalid_config": "Invalid proxy configuration.",
-        "unsupported_config": "Use a VLESS, VMess, Trojan or Shadowsocks link.",
         "config_saved": "Configuration saved.",
         "ping_ok": "Configuration server is reachable.",
         "ping_failed": "Configuration server is not reachable.",
@@ -120,25 +78,12 @@ TEXT = {
         "settings": "تنظیمات",
         "language": "زبان",
         "config_entry": "ورود کانفیگ",
-        "server": "سرور",
-        "port": "پورت",
-        "uuid": "UUID",
-        "sni": "SNI",
-        "public_key": "کلید عمومی",
-        "short_id": "شناسه کوتاه",
-        "fingerprint": "اثر انگشت",
-        "security": "امنیت",
-        "network": "شبکه",
-        "transport_path": "مسیر",
-        "host": "میزبان",
-        "flow": "Flow",
         "about": "درباره",
         "save": "ذخیره",
         "cancel": "انصراف",
         "close": "خروج",
         "no_config": "کانفیگی پیدا نشد",
         "invalid_config": "کانفیگ پراکسی معتبر نیست.",
-        "unsupported_config": "لینک VLESS، VMess، Trojan یا Shadowsocks وارد کنید.",
         "config_saved": "کانفیگ ذخیره شد.",
         "ping_ok": "سرور کانفیگ در دسترس است.",
         "ping_failed": "سرور کانفیگ در دسترس نیست.",
@@ -158,25 +103,12 @@ TEXT = {
         "settings": "الإعدادات",
         "language": "اللغة",
         "config_entry": "إدخال الإعداد",
-        "server": "الخادم",
-        "port": "المنفذ",
-        "uuid": "UUID",
-        "sni": "SNI",
-        "public_key": "المفتاح العام",
-        "short_id": "المعرف القصير",
-        "fingerprint": "البصمة",
-        "security": "الأمان",
-        "network": "الشبكة",
-        "transport_path": "المسار",
-        "host": "المضيف",
-        "flow": "Flow",
         "about": "حول",
         "save": "حفظ",
         "cancel": "إلغاء",
         "close": "إغلاق",
         "no_config": "لم يتم العثور على إعداد",
         "invalid_config": "إعداد البروكسي غير صالح.",
-        "unsupported_config": "أدخل رابط VLESS أو VMess أو Trojan أو Shadowsocks.",
         "config_saved": "تم حفظ الإعداد.",
         "ping_ok": "خادم الإعداد متاح.",
         "ping_failed": "خادم الإعداد غير متاح.",
@@ -202,112 +134,6 @@ def connectSignal(signal, callback):
     return None
 
 
-def queryValue(values, key, default=""):
-    result = values.get(key, [])
-    if not result:
-        return default
-    return unquote(result[0])
-
-
-def parseVlessEntry(value):
-    entry = value.strip()
-    if not entry:
-        raise ValueError("empty")
-    if not entry.lower().startswith("vless://"):
-        raise TypeError("unsupported")
-
-    parsed = urlsplit(entry)
-    uuid = unquote(parsed.username or "")
-    address = parsed.hostname or ""
-    try:
-        port = parsed.port or 443
-    except ValueError:
-        raise ValueError("port")
-    query = parse_qs(parsed.query)
-    security = queryValue(query, "security", "none").lower()
-    network = queryValue(query, "type", "tcp").lower()
-
-    if not uuid or not address or port < 1 or port > 65535:
-        raise ValueError("required")
-    if security not in ("none", "tls", "reality"):
-        raise ValueError("security")
-    if network in ("raw",):
-        network = "tcp"
-    if network in ("websocket",):
-        network = "ws"
-    if network in ("splithttp", "http"):
-        network = "xhttp"
-    if network not in ("tcp", "ws", "grpc", "xhttp"):
-        raise ValueError("network")
-
-    values = {
-        "SERVER_ADDRESS": address,
-        "SERVER_PORT": str(port),
-        "UUID": uuid,
-        "SNI": queryValue(query, "sni", queryValue(query, "serverName", address)),
-        "PUBLIC_KEY": queryValue(query, "pbk", queryValue(query, "publicKey", "")),
-        "SHORT_ID": queryValue(query, "sid", queryValue(query, "shortId", "")),
-        "FINGERPRINT": queryValue(query, "fp", "chrome"),
-        "SECURITY": security,
-        "NETWORK": network,
-        "TRANSPORT_PATH": queryValue(
-            query, "path", queryValue(query, "serviceName", "")
-        ),
-        "HOST": queryValue(query, "host", ""),
-        "FLOW": queryValue(query, "flow", ""),
-    }
-    for item in values.values():
-        if "\n" in item or "\r" in item or '"' in item:
-            raise ValueError("characters")
-    return values
-
-
-def buildVlessEntry(values):
-    address = values["SERVER_ADDRESS"]
-    if ":" in address and not address.startswith("["):
-        address = "[%s]" % address
-
-    query = [
-        ("encryption", "none"),
-        ("security", values["SECURITY"]),
-        ("type", values["NETWORK"]),
-    ]
-    if values["SNI"]:
-        query.append(("sni", values["SNI"]))
-    if values["FINGERPRINT"]:
-        query.append(("fp", values["FINGERPRINT"]))
-    if values["SECURITY"] == "reality":
-        if values["PUBLIC_KEY"]:
-            query.append(("pbk", values["PUBLIC_KEY"]))
-        if values["SHORT_ID"]:
-            query.append(("sid", values["SHORT_ID"]))
-    if values["NETWORK"] == "ws":
-        if values["HOST"]:
-            query.append(("host", values["HOST"]))
-        if values["TRANSPORT_PATH"]:
-            query.append(("path", values["TRANSPORT_PATH"]))
-    elif values["NETWORK"] == "grpc" and values["TRANSPORT_PATH"]:
-        query.append(("serviceName", values["TRANSPORT_PATH"]))
-    elif values["NETWORK"] == "xhttp":
-        if values["HOST"]:
-            query.append(("host", values["HOST"]))
-        if values["TRANSPORT_PATH"]:
-            query.append(("path", values["TRANSPORT_PATH"]))
-    if values["FLOW"]:
-        query.append(("flow", values["FLOW"]))
-
-    return "vless://%s@%s:%s?%s" % (
-        quote(values["UUID"], safe=""),
-        address,
-        values["SERVER_PORT"],
-        urlencode(query),
-    )
-
-
-def writeServerConf(values):
-    writeShareLink(buildVlessEntry(values))
-
-
 def writeShareLink(entry):
     with io.open(USERCONF, "w", encoding="utf-8") as output:
         output.write(as_text(entry) + u"\n")
@@ -317,60 +143,17 @@ def writeShareLink(entry):
         pass
 
 
-def configSettingMap():
-    return {
-        "SERVER_ADDRESS": config.plugins.e2xray.server,
-        "SERVER_PORT": config.plugins.e2xray.port,
-        "UUID": config.plugins.e2xray.uuid,
-        "SNI": config.plugins.e2xray.sni,
-        "PUBLIC_KEY": config.plugins.e2xray.public_key,
-        "SHORT_ID": config.plugins.e2xray.short_id,
-        "FINGERPRINT": config.plugins.e2xray.fingerprint,
-        "SECURITY": config.plugins.e2xray.security,
-        "NETWORK": config.plugins.e2xray.network,
-        "TRANSPORT_PATH": config.plugins.e2xray.path,
-        "HOST": config.plugins.e2xray.host,
-        "FLOW": config.plugins.e2xray.flow,
-    }
-
-
-def applyParsedConfig(values):
-    for key, setting in configSettingMap().items():
-        setting.value = values[key]
-
-
-def manualConfigValues():
-    values = {}
-    for key, setting in configSettingMap().items():
-        values[key] = str(setting.value).strip()
-
+def readShareLink():
     try:
-        port = int(values["SERVER_PORT"])
-    except ValueError:
-        raise ValueError("port")
-    if (
-        not values["SERVER_ADDRESS"]
-        or not values["UUID"]
-        or port < 1
-        or port > 65535
-    ):
-        raise ValueError("required")
-    if values["SECURITY"] not in ("none", "tls", "reality"):
-        raise ValueError("security")
-    if values["NETWORK"] not in ("tcp", "ws", "grpc", "xhttp"):
-        raise ValueError("network")
-    for item in values.values():
-        if "\n" in item or "\r" in item or '"' in item:
-            raise ValueError("characters")
-    values["SERVER_PORT"] = str(port)
-    return values
-
-
-def saveParsedConfig(values):
-    applyParsedConfig(values)
-    for setting in configSettingMap().values():
-        setting.save()
-    writeServerConf(values)
+        with io.open(USERCONF, "r", encoding="utf-8-sig") as source:
+            for line in source:
+                entry = line.strip()
+                if entry and not entry.startswith("#"):
+                    parse_share_link(entry)
+                    return entry
+    except (IOError, OSError, ValueError):
+        pass
+    return ""
 
 
 class E2XrayMain(Screen):
@@ -571,47 +354,23 @@ class E2XrayLanguage(Screen, ConfigListScreen):
 
 class E2XrayConfigEntry(Screen, ConfigListScreen):
     skin = """
-    <screen name="E2XrayConfigEntry" position="center,center" size="780,640" title="e2xray">
-        <widget name="config" position="55,30" size="650,510" scrollbarMode="showOnDemand" />
-        <widget name="key_red" position="60,575" size="170,38" font="Regular;22" foregroundColor="red" />
-        <widget name="key_green" position="550,575" size="170,38" font="Regular;22" foregroundColor="green" halign="right" />
+    <screen name="E2XrayConfigEntry" position="center,center" size="780,280" title="e2xray">
+        <widget name="config" position="40,35" size="700,145" scrollbarMode="showOnDemand" />
+        <widget name="key_red" position="60,215" size="170,38" font="Regular;22" foregroundColor="red" />
+        <widget name="key_green" position="550,215" size="170,38" font="Regular;22" foregroundColor="green" halign="right" />
     </screen>"""
 
     def __init__(self, session):
         Screen.__init__(self, session)
         self.entry = config.plugins.e2xray.config_entry
-        self.settings = [
-            self.entry,
-            config.plugins.e2xray.server,
-            config.plugins.e2xray.port,
-            config.plugins.e2xray.uuid,
-            config.plugins.e2xray.sni,
-            config.plugins.e2xray.public_key,
-            config.plugins.e2xray.short_id,
-            config.plugins.e2xray.fingerprint,
-            config.plugins.e2xray.security,
-            config.plugins.e2xray.network,
-            config.plugins.e2xray.path,
-            config.plugins.e2xray.host,
-            config.plugins.e2xray.flow,
-        ]
-        self.list = [
-            getConfigListEntry(tr("config_entry"), self.entry),
-            getConfigListEntry(tr("server"), config.plugins.e2xray.server),
-            getConfigListEntry(tr("port"), config.plugins.e2xray.port),
-            getConfigListEntry(tr("uuid"), config.plugins.e2xray.uuid),
-            getConfigListEntry(tr("sni"), config.plugins.e2xray.sni),
-            getConfigListEntry(tr("public_key"), config.plugins.e2xray.public_key),
-            getConfigListEntry(tr("short_id"), config.plugins.e2xray.short_id),
-            getConfigListEntry(tr("fingerprint"), config.plugins.e2xray.fingerprint),
-            getConfigListEntry(tr("security"), config.plugins.e2xray.security),
-            getConfigListEntry(tr("network"), config.plugins.e2xray.network),
-            getConfigListEntry(tr("transport_path"), config.plugins.e2xray.path),
-            getConfigListEntry(tr("host"), config.plugins.e2xray.host),
-            getConfigListEntry(tr("flow"), config.plugins.e2xray.flow),
-        ]
+        self.entry.value = readShareLink()
+        self.list = [getConfigListEntry(tr("config_entry"), self.entry)]
         self.active_setting = None
         ConfigListScreen.__init__(self, self.list, session=session)
+        try:
+            self["config"].l.setSeperation(210)
+        except Exception:
+            pass
         self["key_red"] = Label(tr("cancel"))
         self["key_green"] = Label(tr("save"))
         self["actions"] = ActionMap(
@@ -646,11 +405,9 @@ class E2XrayConfigEntry(Screen, ConfigListScreen):
         if value is None or setting is None:
             return
         setting.value = value.strip()
-        if setting is self.entry and setting.value:
+        if setting.value:
             try:
                 parse_share_link(setting.value)
-                if setting.value.lower().startswith("vless://"):
-                    applyParsedConfig(parseVlessEntry(setting.value))
             except ValueError:
                 self.session.open(
                     MessageBox,
@@ -658,8 +415,6 @@ class E2XrayConfigEntry(Screen, ConfigListScreen):
                     MessageBox.TYPE_ERROR,
                     timeout=8,
                 )
-        elif setting is not self.entry:
-            self.entry.value = ""
         try:
             self["config"].invalidateCurrent()
         except Exception:
@@ -668,19 +423,11 @@ class E2XrayConfigEntry(Screen, ConfigListScreen):
     def save(self):
         try:
             entry = self.entry.value.strip()
-            if entry:
-                parse_share_link(entry)
-                if entry.lower().startswith("vless://"):
-                    values = parseVlessEntry(entry)
-                    applyParsedConfig(values)
-                    for setting in configSettingMap().values():
-                        setting.save()
-                writeShareLink(entry)
-                self.entry.save()
-            else:
-                values = manualConfigValues()
-                saveParsedConfig(values)
-                self.entry.save()
+            if not entry:
+                raise ValueError("empty")
+            parse_share_link(entry)
+            writeShareLink(entry)
+            self.entry.save()
             configfile.save()
         except ValueError:
             self.session.open(MessageBox, tr("invalid_config"), MessageBox.TYPE_ERROR, timeout=8)
@@ -705,8 +452,7 @@ class E2XrayConfigEntry(Screen, ConfigListScreen):
         self.close(True)
 
     def cancel(self):
-        for setting in self.settings:
-            setting.cancel()
+        self.entry.cancel()
         self.close(False)
 
 
