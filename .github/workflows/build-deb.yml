@@ -166,6 +166,10 @@ jobs:
               assert json.loads(xray_path.read_text())["outbounds"][0][
                   "protocol"
               ] == "trojan"
+              parser.bind_tun_interface(str(xray_path), "eth0")
+              assert json.loads(xray_path.read_text())["inbounds"][0][
+                  "settings"
+              ]["autoOutboundsInterface"] == "eth0"
               parser.clear_selection(str(selection_path))
               assert parser.read_selection(str(selection_path)) == ""
           PY

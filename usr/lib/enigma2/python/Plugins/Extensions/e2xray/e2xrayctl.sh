@@ -294,12 +294,16 @@ start_xray() {
         echo "Could not detect the original gateway or resolve the Xray server."
         exit 1
     fi
+    if ! "$PYTHON" "$PARSER" --bind-interface "$CONF" "$DEFAULT_DEV" >> "$LOG" 2>&1; then
+        echo "Could not bind Xray to the original network interface."
+        exit 1
+    fi
     if ! setup_dns; then
         restore_dns
         echo "Could not safely update DNS."
         exit 1
     fi
-    log "Starting e2xray"
+    log "Starting e2xray via $DEFAULT_DEV"
     "$XRAY" run -c "$CONF" >> "$LOG" 2>&1 &
     echo $! > "$PIDFILE"
     if ! wait_for_tun; then

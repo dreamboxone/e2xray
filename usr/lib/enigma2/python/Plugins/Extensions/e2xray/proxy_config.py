@@ -574,7 +574,8 @@ def atomic_write(path, content, mode=0o600):
     with io.open(temporary_path, "w", encoding="utf-8") as output:
         output.write(content)
     os.chmod(temporary_path, mode)
-    os.rename(temporary_path, path)
+    replace = getattr(os, "replace", os.rename)
+    replace(temporary_path, path)
 
 
 def write_runtime(path, parsed):
@@ -595,10 +596,42 @@ def write_xray_config(path, parsed):
     atomic_write(path, as_text(content) + "\n")
 
 
+def bind_tun_interface(path, interface):
+    interface = as_text(interface).strip()
+    if not re.match(r"^[A-Za-z0-9_.:-]+$", interface):
+        raise ValueError("invalid outbound interface")
+    with io.open(path, "r", encoding="utf-8") as source:
+        config_data = json.load(source)
+    found = False
+    for inbound in config_data.get("inbounds", []):
+        if inbound.get("protocol") == "tun":
+            inbound.setdefault("settings", {})[
+                "autoOutboundsInterface"
+            ] = interface
+            found = True
+    if not found:
+        raise ValueError("TUN inbound is missing")
+    content = json.dumps(
+        config_data,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    atomic_write(path, as_text(content) + "\n")
+
+
 def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "--bind-interface":
+        try:
+            bind_tun_interface(sys.argv[2], sys.argv[3])
+        except Exception as error:
+            print("Could not bind Xray outbound interface: %s" % error, file=sys.stderr)
+            return 1
+        return 0
     if len(sys.argv) != 5:
         print(
-            "Usage: proxy_config.py INPUT SELECTION RUNTIME_OUTPUT XRAY_CONFIG_OUTPUT",
+            "Usage: proxy_config.py INPUT SELECTION RUNTIME_OUTPUT XRAY_CONFIG_OUTPUT\n"
+            "       proxy_config.py --bind-interface XRAY_CONFIG INTERFACE",
             file=sys.stderr,
         )
         return 2
