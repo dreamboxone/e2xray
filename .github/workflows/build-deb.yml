@@ -1,4 +1,4 @@
-name: Build Debian packages
+name: Build Enigma2 packages
 
 on:
   workflow_dispatch:
@@ -164,6 +164,97 @@ jobs:
           dpkg-deb --contents "$package" >/dev/null
           if dpkg-deb --contents "$package" |
               grep -Eq '/(\.github|cores|tests)(/|$)|/(README\.md|build\.sh)$'; then
+            echo "Development files leaked into the installable package." >&2
+            exit 1
+          fi
+
+          sha256sum "$package" > "$package.sha256"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: |
+            dist/${{ steps.package.outputs.filename }}
+            dist/${{ steps.package.outputs.filename }}.sha256
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  build-openatv8:
+    name: Build arm64 IPK for OpenATV 8
+    needs: validate
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Read package metadata
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package="$(
+            sed -n 's/^Package:[[:space:]]*//p' DEBIAN/control |
+              head -n 1
+          )"
+          version="$(
+            sed -n 's/^Version:[[:space:]]*//p' DEBIAN/control |
+              head -n 1
+          )"
+          test -n "$package"
+          test -n "$version"
+
+          filename="${package}_${version}_arm64.ipk"
+          echo "filename=$filename" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=${package}_${version}_openatv8_arm64" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Build package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist
+          chmod +x build.sh
+          ./build.sh ipk arm64 "$GITHUB_WORKSPACE/dist"
+
+      - name: Inspect package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package="dist/${{ steps.package.outputs.filename }}"
+          test -s "$package"
+
+          members="$(ar t "$package")"
+          printf '%s\n' "$members"
+          printf '%s\n' "$members" | grep -qx 'debian-binary'
+          printf '%s\n' "$members" | grep -qx 'control.tar.gz'
+          printf '%s\n' "$members" | grep -qx 'data.tar.gz'
+
+          extracted="$(mktemp -d)"
+          control="$(mktemp -d)"
+          trap 'rm -rf "$extracted" "$control"' EXIT
+
+          ar p "$package" control.tar.gz | tar -xz -C "$control"
+          grep -qx 'Architecture: arm64' "$control/control"
+
+          ar p "$package" data.tar.gz | tar -xz -C "$extracted"
+          packaged_core="$extracted/usr/lib/e2xray/bin/xray"
+          cmp cores/arm64/xray "$packaged_core"
+          readelf -h "$packaged_core" |
+            grep -Eq 'Class:[[:space:]]+ELF64'
+          readelf -h "$packaged_core" |
+            grep -Eq "Data:.*2's complement, little endian"
+          readelf -h "$packaged_core" |
+            grep -Eq 'Machine:.*AArch64'
+
+          if find "$extracted" -path '*/.github/*' -o -path '*/cores/*' \
+              -o -path '*/tests/*' -o -name README.md -o -name build.sh |
+              grep -q .; then
             echo "Development files leaked into the installable package." >&2
             exit 1
           fi

@@ -22,6 +22,10 @@ The `mipsel` package contains the official little-endian
 Do not install either package on ARM32, x86 or an Enigma2 image that does not
 use `dpkg`.
 
+OpenATV 8 images for Dreambox One use `opkg` and IPK packages. On those images,
+`opkg print-architecture` includes `arm64`, so build and install the OpenATV
+package as `enigma2-plugin-extensions-e2xray_0.6.0_arm64.ipk`.
+
 The ARM64 build has been tested on Dreambox One. The MIPS little-endian build
 targets DM525/OpenDreambox 2.5 and is statically validated in GitHub Actions;
 an on-receiver test is still required for final runtime confirmation.
@@ -323,11 +327,18 @@ Build MIPS little-endian:
 ./build.sh mipsel
 ```
 
+Build OpenATV 8 IPK for Dreambox One:
+
+```sh
+./build.sh ipk arm64
+```
+
 The outputs are:
 
 ```text
 enigma2-plugin-extensions-e2xray_0.6.0_arm64.deb
 enigma2-plugin-extensions-e2xray_0.6.0_mipsel.deb
+enigma2-plugin-extensions-e2xray_0.6.0_arm64.ipk
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
