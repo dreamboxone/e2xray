@@ -271,3 +271,58 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+  bundle-packages:
+    name: Bundle all packages
+    needs:
+      - build
+      - build-openatv8
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Read package metadata
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package="$(
+            sed -n 's/^Package:[[:space:]]*//p' DEBIAN/control |
+              head -n 1
+          )"
+          version="$(
+            sed -n 's/^Version:[[:space:]]*//p' DEBIAN/control |
+              head -n 1
+          )"
+          test -n "$package"
+          test -n "$version"
+
+          echo "artifact_name=${package}_${version}_all" >> "$GITHUB_OUTPUT"
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Verify bundled outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ls -l dist
+          test "$(find dist -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 2
+          test "$(find dist -maxdepth 1 -type f -name '*.ipk' | wc -l)" -eq 1
+          test "$(find dist -maxdepth 1 -type f -name '*.sha256' | wc -l)" -eq 3
+
+      - name: Upload all packages
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
