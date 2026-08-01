@@ -303,7 +303,7 @@ jobs:
           echo "artifact_name=${package}_${version}_all" >> "$GITHUB_OUTPUT"
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
