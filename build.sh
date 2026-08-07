@@ -4,7 +4,7 @@ set -eu
 PROJECT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 CONTROL_FILE="$PROJECT_DIR/DEBIAN/control"
 
-# New syntax: ./build.sh [deb|ipk] [arm64|mipsel] [output-directory]
+# New syntax: ./build.sh [deb|ipk] [arm64|mipsel|armv7ahf-vfp-neon|armv7ahf-neon] [output-directory]
 # Compatibility syntax: ./build.sh [arm64|mipsel] [output-directory]
 # A single non-architecture argument keeps the old ARM64 output-dir syntax.
 case "${1:-}" in
@@ -44,6 +44,13 @@ case "$TARGET_ARCH" in
         ;;
     mipsel)
         CORE_REL="cores/mipsel/xray"
+        ;;
+    armv7ahf-vfp-neon|armv7ahf-neon)
+        if [ "$PACKAGE_FORMAT" != "ipk" ]; then
+            echo "ARMv7 targets are supported only as IPK packages." >&2
+            exit 1
+        fi
+        CORE_REL="cores/armv7/xray"
         ;;
     *)
         echo "Unsupported architecture: $TARGET_ARCH" >&2
