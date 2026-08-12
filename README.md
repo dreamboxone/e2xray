@@ -15,6 +15,8 @@ from the Internet.
 | Dreambox One / Two | OpenDreambox (`dpkg`) | `aarch64` | `arm64` DEB |
 | DM520 / DM525 | OpenDreambox (`dpkg`) | `mips` | `mipsel` DEB |
 | GigaBlue UHD ARM receivers | OpenPLi/OpenBH/OpenATV (`opkg`) | `armv7l` | architecture printed by `opkg print-architecture` |
+| Vu+ 4K ARM receivers | OpenPLi/OpenBH/OpenATV/VTi (`opkg`) | normally `armv7l` | ARMv7 `_all.ipk` or architecture-specific ARMv7 IPK |
+| Older Vu+ MIPS receivers | OpenPLi/OpenBH/OpenATV/VTi (`opkg`) | normally `mips` | `_mips-all.ipk` |
 
 The `mipsel` package contains the official little-endian
 `Xray-linux-mips32le` core. In particular, a DM525 can report `mips` from
@@ -26,13 +28,22 @@ receivers must use the IPK whose architecture name appears in
 `cortexa15hf-neon-vfpv4`). Users who are unsure may use the ARMv7 `_all.ipk`;
 its installer checks the CPU before installing the bundled core.
 
+Vu+ models are split between two CPU families. The 4K generation—including
+Solo 4K, Uno 4K/SE, Ultimo 4K, Zero 4K and Duo 4K/SE—is ARM-based and normally
+uses the ARMv7 `_all.ipk`. Older non-4K models—including Duo/Duo2, Solo/Solo2,
+Solo SE, Uno, Ultimo and Zero—are generally MIPS and should use
+`_mips-all.ipk`. Model names alone are not the final test: always verify
+`uname -m` and `opkg print-architecture` before installing.
+
 OpenATV 8 images for Dreambox One also use `opkg` and IPK packages. On those images,
 `opkg print-architecture` includes `arm64`, so build and install the OpenATV
 package as `enigma2-plugin-extensions-e2xray_0.6.7_arm64.ipk`.
 
 The ARM64 build has been tested on Dreambox One. The MIPS little-endian build
 targets DM525/OpenDreambox 2.5 and is statically validated in GitHub Actions;
-an on-receiver test is still required for final runtime confirmation.
+an on-receiver test is still required for final runtime confirmation. Vu+
+package selection is documented by CPU family, but runtime validation on each
+Vu+ model/image combination is still required.
 
 ## Features
 
@@ -119,6 +130,8 @@ the matching core before Enigma2 is restarted.
 | Receiver/image | Recommended package |
 | --- | --- |
 | GigaBlue ARMv7 with OpenPLi/OpenBH/OpenATV | `_all.ipk`, or the IPK exactly matching `opkg print-architecture` |
+| Vu+ 4K ARM with OpenPLi/OpenBH/OpenATV/VTi | `_all.ipk`, or the matching ARMv7 IPK |
+| Older Vu+ MIPS with `opkg` | `_mips-all.ipk` |
 | Dreambox One/Two with `dpkg` | `_arm64.deb` |
 | Dreambox One with `opkg` | `_arm64.ipk` |
 | DM520/DM525 with `dpkg` | `_mipsel.deb` |
@@ -190,6 +203,12 @@ rejects non-ARMv7 CPUs and ARMv7 CPUs without VFPv3/VFPv4 before files are
 installed; the post-install script then verifies that the embedded core runs.
 
 Recommended simple installation for an ARMv7 GigaBlue receiver:
+
+```sh
+opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
+```
+
+The same ARMv7 package is recommended for ARM-based Vu+ 4K receivers:
 
 ```sh
 opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
@@ -281,6 +300,10 @@ uname -m
 
 - برای ریسیورهای ARMv7 گیگابلو با OpenPLi، OpenBH یا OpenATV، بسته
   `enigma2-plugin-extensions-e2xray_0.6.7_all.ipk` پیشنهاد می‌شود.
+- برای مدل‌های 4K ویوپلاس مانند Solo 4K، Uno 4K/SE، Ultimo 4K، Zero 4K و
+  Duo 4K/SE که پردازنده ARM دارند، بسته `_all.ipk` پیشنهاد می‌شود.
+- برای مدل‌های قدیمی‌تر و غیر 4K ویوپلاس با پردازنده MIPS، مانند Duo2،
+  Solo2، Solo SE و Zero معمولی، از بسته `_mips-all.ipk` استفاده کنید.
 - برای Dreambox One/Two دارای `dpkg` از بسته `_arm64.deb` استفاده کنید.
 - برای Dreambox One دارای `opkg` از بسته `_arm64.ipk` استفاده کنید.
 - برای DM520/DM525 دارای `dpkg` از بسته `_mipsel.deb` استفاده کنید.
@@ -296,6 +319,23 @@ opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
 
 اگر نام معماری دقیق ریسیور را می‌دانید، می‌توانید به‌جای بسته عمومی از IPK
 هم‌نام با خروجی `opkg print-architecture` استفاده کنید.
+
+### نصب روی Vu+‎
+
+برای مدل‌های ARM خانواده 4K:
+
+```sh
+opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
+```
+
+برای مدل‌های قدیمی‌تر دارای پردازنده MIPS:
+
+```sh
+opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_mips-all.ipk
+```
+
+پیش از نصب حتماً `uname -m` را بررسی کنید. خروجی `armv7l` به بسته ARMv7 و
+خروجی `mips` به بسته MIPS نیاز دارد. وجود TUN در کرنل ایمیج همچنان الزامی است.
 
 ### نصب روی Dreambox
 
