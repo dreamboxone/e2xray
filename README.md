@@ -1,12 +1,35 @@
 # e2xray
 
-e2xray is an Xray client for Enigma2 receivers. It routes the receiver's
-traffic through an Xray TUN interface and provides Start, Stop, Ping, status,
+e2xray is an Xray client for Enigma2 receivers. It routes the whole receiver's
+traffic through Xray and provides Start, Stop, real-delay testing, status,
 configuration selection and settings from the Enigma2 user interface.
 
 The architecture-specific DEB/IPK packages contain the official Xray-core `v26.5.9`
 binary. Users do not need to install Xray-core or download additional packages
 from the Internet.
+
+## How traffic is captured
+
+Enigma2 images differ widely in what their kernel and userland provide, so
+e2xray probes the receiver at start and picks the first backend that works:
+
+| Order | Backend | Captures | Requires |
+| --- | --- | --- | --- |
+| 1 | TUN | everything | `/dev/net/tun` (`kernel-module-tun`) |
+| 2 | TPROXY | TCP + UDP | `iptables`, `xt_TPROXY`, `xt_socket`, `ip rule` |
+| 3 | REDIRECT | TCP only | `iptables` with NAT |
+
+The selected backend is written to `/tmp/e2xray.log` and shown next to
+**Configurations** on the main screen while e2xray runs.
+
+In both transparent backends, DNS is redirected into Xray on port `15353` and
+resolved through the tunnel, and connections are sniffed for their HTTP/TLS
+hostname. This matters: without it the receiver's own resolver decides where a
+connection goes, and a filtered network answers with the wrong address.
+
+If none of the three is available, e2xray refuses to start and names the
+missing component. That is an image limitation, not a configuration problem —
+see [Receivers without TUN](#receivers-without-tun).
 
 ## Compatibility
 
@@ -37,7 +60,7 @@ Solo SE, Uno, Ultimo and Zero—are generally MIPS and should use
 
 OpenATV 8 images for Dreambox One also use `opkg` and IPK packages. On those images,
 `opkg print-architecture` includes `arm64`, so build and install the OpenATV
-package as `enigma2-plugin-extensions-e2xray_0.6.7_arm64.ipk`.
+package as `enigma2-plugin-extensions-e2xray_1.1.0_arm64.ipk`.
 
 The ARM64 build has been tested on Dreambox One. The MIPS little-endian build
 targets DM525/OpenDreambox 2.5 and is statically validated in GitHub Actions;
@@ -47,20 +70,23 @@ Vu+ model/image combination is still required.
 
 ## Features
 
-- Full-device traffic routing through an Xray TUN interface
+- Full-device traffic routing over TUN, TPROXY or iptables REDIRECT, selected
+  automatically for the image
+- Real-delay testing: a genuine HTTP round trip through the configuration, not
+  a TCP ping to the server
 - Start, Stop, Ping and Settings controls
-- English, Persian and Arabic user interfaces
+- English, Persian and Arabic user interfaces, including translated start errors
 - VLESS, VMess, Trojan and Shadowsocks share links
 - Multiple named configurations on the main screen
 - UTF-8 profile names, including Persian and Arabic names
 - RAW/TCP, WebSocket, gRPC and XHTTP transports where supported
 - XHTTP `mode`, `extra` and padding settings from share links
 - TLS and REALITY transport security
-- Ping latency displayed beside the selected configuration
-- Embedded DNS defaults: `8.8.8.8` and `1.1.1.1`
-- Direct routes for the proxy server to prevent routing loops
+- DNS resolved through the tunnel on every backend
+- Hostname sniffing, so a filtered local resolver cannot redirect connections
+- Direct routes and an fwmark self-bypass to prevent routing loops
 - Automatic fallback for receivers whose BusyBox does not support `ip rule`
-- DNS and routing restoration when e2xray stops
+- DNS, routing and iptables restoration when e2xray stops
 - Embedded architecture-matched Xray-core with no online installation dependency
 
 e2xray is **stopped by default** after installation and after boot. It starts
@@ -73,8 +99,9 @@ Before installation, confirm that:
 - The receiver runs Enigma2 and installs packages with `dpkg` or `opkg`.
 - `dpkg --print-architecture` or `opkg print-architecture` reports an architecture
   matching one of the supplied packages.
-- The image kernel provides TUN support. Version 0.6.7 automatically loads the
-  `tun` module and creates `/dev/net/tun` when the driver is available.
+- The image provides **either** TUN **or** `iptables`. e2xray automatically
+  loads the `tun` module and creates `/dev/net/tun` when the driver exists, and
+  falls back to TPROXY or REDIRECT when it does not.
 - You have a valid VLESS, VMess, Trojan or Shadowsocks share link.
 
 Run these commands over SSH:
@@ -83,6 +110,7 @@ Run these commands over SSH:
 uname -m
 (command -v dpkg >/dev/null && dpkg --print-architecture) || opkg print-architecture
 ls -l /dev/net/tun
+which iptables ip
 ```
 
 Typical output is one of:
@@ -106,18 +134,18 @@ No separate Xray-core installation is required.
 Download the DEB/IPK matching the receiver's package architecture from the
 [e2xray Releases page](https://github.com/dreamboxone/e2xray/releases).
 
-Version `0.6.7` produces these packages:
+Version `1.1.0` produces these packages:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.6.7_arm64.deb
-enigma2-plugin-extensions-e2xray_0.6.7_mipsel.deb
-enigma2-plugin-extensions-e2xray_0.6.7_arm64.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_armv7ahf-vfp-neon.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_armv7ahf-neon.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_cortexa15hf-neon-vfpv4.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_mips-all.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_all.deb
+enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
+enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
+enigma2-plugin-extensions-e2xray_1.1.0_arm64.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-vfp-neon.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-neon.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_cortexa15hf-neon-vfpv4.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_mips-all.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_all.deb
 ```
 
 The single `_all.deb` contains ARM64, ARMv7, mips32le and mips64le cores. Its
@@ -139,26 +167,39 @@ the matching core before Enigma2 is restarted.
 
 Do not use `_all.deb` on an `opkg` image and do not rename a DEB to IPK.
 
-## What's new in 0.6.7
+## What's new in 1.1.0
 
-Version 0.6.7 fixes the startup error seen on some GigaBlue/OpenPLi receivers:
+**Ping is now a real-delay test.** Earlier versions measured a TCP connect to
+the proxy server, which only proved the edge host was reachable. The yellow
+button now starts a temporary Xray instance and times a complete HTTP request
+carried through the selected configuration. On a tested receiver the same
+profile reported `7 ms` as a TCP connect and `371 ms` as a real round trip.
 
-```text
-TUN routing failed; the original network settings were restored.
-```
+**Transparent backends actually carry traffic.** TPROXY and REDIRECT were
+present before but incomplete:
 
-Some Enigma2 images provide a reduced BusyBox `ip` command without `ip rule`,
-and some receiver kernels cannot use a separate policy-routing table. e2xray
-now detects this condition and automatically switches to safe split-default
-routes. No manual setting is required.
+- Connections are now sniffed for their HTTP/TLS/QUIC hostname, so the remote
+  server resolves the name instead of trusting the receiver's local answer.
+- DNS is redirected into a dedicated Xray inbound and resolved through the
+  tunnel, instead of staying with the receiver's resolver.
+- Xray's own transport is tagged with an fwmark and returned early from the
+  iptables chains, so the proxy connection can no longer capture itself.
 
-This release also:
+Both were verified on real hardware: TCP, UDP and DNS confirmed flowing through
+`transparent-in` and `dns-in`.
 
-- records the exact failed network command in `/tmp/e2xray.log`;
-- recommends full `iproute2` and the matching `kernel-module-tun` on IPK images;
-- checks that Xray remains alive while routes are installed;
-- safely restores DNS, reverse-path filtering and plugin-owned routes;
-- preserves pre-existing routes, table `101` and priority `1001` rules.
+Also in this release:
+
+- The DNS inbound listens on `15353`. Port `5353` is mDNS and `avahi-daemon`
+  already owns it on most Enigma2 images.
+- Cleanup loops are bounded, so a BusyBox `ip` that returns success for an
+  unsupported subcommand can no longer hang Stop and strand the receiver.
+- `/usr/sbin` and `/sbin` are added to `PATH` before probing, so `ip` and
+  `iptables` are not reported missing merely because of a restricted
+  environment.
+- Start failures show a translated explanation and the actionable next step,
+  not only an English detail string.
+- The active backend is shown next to **Configurations**.
 
 ## Installation
 
@@ -170,7 +211,7 @@ file manager.
 Example from Windows PowerShell:
 
 ```powershell
-scp .\enigma2-plugin-extensions-e2xray_0.6.7_arm64.deb root@RECEIVER_IP:/tmp/
+scp .\enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb root@RECEIVER_IP:/tmp/
 ```
 
 For a MIPS receiver, use the `_mipsel.deb` filename instead. Replace
@@ -181,13 +222,13 @@ For a MIPS receiver, use the `_mipsel.deb` filename instead. Replace
 On Dreambox One/Two:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.7_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
 ```
 
 On DM520/DM525:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.7_mipsel.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
 ```
 
 On GigaBlue ARMv7 with OpenPLi, OpenBH or OpenATV, first choose the filename
@@ -195,7 +236,7 @@ whose suffix is listed by
 `opkg print-architecture`, then install it with:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_ARCH.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_ARCH.ipk
 ```
 
 Alternatively, use the single `_all.ipk` ARMv7 package. Its pre-install script
@@ -205,13 +246,13 @@ installed; the post-install script then verifies that the embedded core runs.
 Recommended simple installation for an ARMv7 GigaBlue receiver:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
 ```
 
 The same ARMv7 package is recommended for ARM-based Vu+ 4K receivers:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
 ```
 
 For opkg-based little-endian MIPS receivers, use the single `_mips-all.ipk`
@@ -273,13 +314,19 @@ configuration must be stopped before selecting another one.
 
 ### 5. Test the configuration
 
-Select a configuration and press the yellow **Ping** button. The measured
-latency is displayed in milliseconds beside its name.
+Select a configuration and press the yellow **Ping** button. e2xray starts a
+temporary Xray instance, sends a real HTTP request through that configuration
+and shows the round-trip time in milliseconds beside its name.
 
-The Internet Status lamp uses Cloudflare:
+This is a real-delay test, not a TCP ping. It measures what the tunnel actually
+delivers, so a server that answers TCP quickly but proxies badly is visible as a
+high number rather than a low one. Expect values well above a raw `ping` to the
+same host.
 
-- Green: Online
-- Red: Offline
+The Network lamp is green when the receiver has a usable IPv4 address on a real
+interface. The Internet lamp probes Google, Cloudflare and Apple independently;
+one success is enough, and all three failing triggers a retry before the lamp
+turns red.
 
 To verify the public IP over SSH while e2xray is running:
 
@@ -299,7 +346,7 @@ uname -m
 ```
 
 - برای ریسیورهای ARMv7 گیگابلو با OpenPLi، OpenBH یا OpenATV، بسته
-  `enigma2-plugin-extensions-e2xray_0.6.7_all.ipk` پیشنهاد می‌شود.
+  `enigma2-plugin-extensions-e2xray_1.1.0_all.ipk` پیشنهاد می‌شود.
 - برای مدل‌های 4K ویوپلاس مانند Solo 4K، Uno 4K/SE، Ultimo 4K، Zero 4K و
   Duo 4K/SE که پردازنده ARM دارند، بسته `_all.ipk` پیشنهاد می‌شود.
 - برای مدل‌های قدیمی‌تر و غیر 4K ویوپلاس با پردازنده MIPS، مانند Duo2،
@@ -314,7 +361,7 @@ uname -m
 فایل IPK را در مسیر `/tmp` کپی و اجرا کنید:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
 ```
 
 اگر نام معماری دقیق ریسیور را می‌دانید، می‌توانید به‌جای بسته عمومی از IPK
@@ -325,30 +372,60 @@ opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
 برای مدل‌های ARM خانواده 4K:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
 ```
 
 برای مدل‌های قدیمی‌تر دارای پردازنده MIPS:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_0.6.7_mips-all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_mips-all.ipk
 ```
 
 پیش از نصب حتماً `uname -m` را بررسی کنید. خروجی `armv7l` به بسته ARMv7 و
-خروجی `mips` به بسته MIPS نیاز دارد. وجود TUN در کرنل ایمیج همچنان الزامی است.
+خروجی `mips` به بسته MIPS نیاز دارد.
+
+### ریسیورهایی که TUN ندارند
+
+بسیاری از ایمیج‌های ویوپلاس نه ماژول TUN دارند و نه `iptables`، هرچند هر دو در
+فید خودشان موجود است. برای نمونه یک Vu+ Zero 4K با کرنل `4.1.20` چنین می‌دهد:
+
+```text
+ls: /dev/net/tun: No such file or directory
+-bash: iptables: command not found
+```
+
+روی چنین ریسیوری e2xray با خطای `NO_NETWORK_BACKEND` بالا نمی‌آید و می‌گوید چه
+چیزی کم است. اول وضعیت را ببینید:
+
+```sh
+ls -l /dev/net/tun; which iptables ip; lsmod | grep tun
+```
+
+سپس آنچه فید دارد را نصب کنید:
+
+```sh
+opkg update && opkg install kernel-module-tun iptables iptables-modules iptables-module-xt-tproxy iptables-module-xt-socket iproute2
+```
+
+بعد حتماً `reboot` کنید، چون ماژول TUN فقط در بوت تازه بارگذاری می‌شود. اگر نام
+`kernel-module-tun` پیدا نشد، نام دقیق همراه نسخهٔ کرنل را از خروجی
+`opkg list | grep kernel-module-tun` بردارید، مثلاً `kernel-module-tun-4.1.20-1.9`.
+
+نصب فقط `iptables` هم کافی است تا e2xray از مسیر REDIRECT کار کند؛ افزودن
+`xt_TPROXY` و `xt_socket` علاوه بر آن UDP را هم فعال می‌کند.
 
 ### نصب روی Dreambox
 
 برای Dreambox One/Two:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.7_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
 ```
 
 برای DM520/DM525:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_0.6.7_mipsel.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
 ```
 
 ### ارتقا از نسخه قبلی
@@ -403,30 +480,42 @@ Check the service status and recent log messages:
 tail -n 100 /tmp/e2xray.log
 ```
 
-Version 0.6.7 also shows the concrete start failure on screen. `Error (3)` in
+Version 1.1.0 also shows the concrete start failure on screen. `Error (3)` in
 older versions is only Enigma2's numeric message-box type; it is not the Xray
 exit code.
 
-Confirm that TUN is available:
+### Receivers without TUN
 
-```sh
-ls -l /dev/net/tun
+Several Vu+ and other OE-Alliance images ship neither the TUN driver nor
+`iptables`, even though their feed carries both. A Vu+ Zero 4K on kernel
+`4.1.20` reports:
+
+```text
+ls: /dev/net/tun: No such file or directory
+-bash: iptables: command not found
 ```
 
-The 0.6.7 IPKs recommend `kernel-module-tun` and full `iproute2`. During
-installation, opkg tries to install packages built for the receiver's image.
-Because this is a soft dependency, an offline or blocked feed does not prevent e2xray
-itself from being installed. The installer and plugin UI warn that TUN must be
-installed manually, and e2xray remains unusable until it is available. At start,
-e2xray also tries `modprobe tun`, a direct `insmod` fallback and safe creation of
-the standard character device (`10:200`). To install the module manually:
+On such a receiver e2xray cannot capture traffic by any method and refuses to
+start with `NO_NETWORK_BACKEND`, naming what is missing. Check first:
 
 ```sh
-uname -r
-opkg update
-opkg install kernel-module-tun
-reboot
+ls -l /dev/net/tun; which iptables ip; lsmod | grep tun
 ```
+
+Then install what the feed offers. On openATV/OpenPLi:
+
+```sh
+opkg update && opkg install kernel-module-tun iptables iptables-modules iptables-module-xt-tproxy iptables-module-xt-socket iproute2
+```
+
+Reboot afterwards, because the TUN module is only picked up on a fresh boot.
+If `kernel-module-tun` is not found under that name, use the exact
+kernel-versioned name from `opkg list | grep kernel-module-tun`, for example
+`kernel-module-tun-4.1.20-1.9`.
+
+`iptables` alone is enough to make e2xray work through the REDIRECT backend;
+adding `xt_TPROXY` and `xt_socket` additionally enables UDP. TUN remains the
+best option where the driver exists.
 
 Do not copy `tun.ko` from a different image or kernel version.
 
@@ -442,7 +531,7 @@ ip route get 1.1.1.1
 
 The route to public addresses should use `e2xray0`. The proxy server itself
 must continue to use the receiver's physical network interface. On receivers
-whose BusyBox or kernel cannot use `ip rule`, version 0.6.7 automatically uses
+whose BusyBox or kernel cannot use `ip rule`, version 1.1.0 automatically uses
 the portable `0.0.0.0/1` and `128.0.0.0/1` split-default routes instead; this is
 reported as `TUN routing mode: split default routes` in `/tmp/e2xray.log`.
 
@@ -470,7 +559,7 @@ created, brings down its TUN interface and restores saved DNS/network settings.
 The existing `/root/config.txt` is preserved during a normal upgrade.
 
 Users upgrading specifically to fix the GigaBlue/OpenPLi routing error should
-install version 0.6.7 directly over the older version; uninstalling first is
+install version 1.1.0 directly over the older version; uninstalling first is
 not required.
 
 Upload the newer package to `/tmp`, then run either:
@@ -540,15 +629,15 @@ Build one auto-detecting DEB for ARM64, ARMv7, MIPS32LE and MIPS64LE:
 The outputs are:
 
 ```text
-enigma2-plugin-extensions-e2xray_0.6.7_arm64.deb
-enigma2-plugin-extensions-e2xray_0.6.7_mipsel.deb
-enigma2-plugin-extensions-e2xray_0.6.7_arm64.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_armv7ahf-vfp-neon.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_armv7ahf-neon.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_cortexa15hf-neon-vfpv4.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_all.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_mips-all.ipk
-enigma2-plugin-extensions-e2xray_0.6.7_all.deb
+enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
+enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
+enigma2-plugin-extensions-e2xray_1.1.0_arm64.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-vfp-neon.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-neon.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_cortexa15hf-neon-vfpv4.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_mips-all.ipk
+enigma2-plugin-extensions-e2xray_1.1.0_all.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
