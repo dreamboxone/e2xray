@@ -64,7 +64,7 @@ Solo SE, Uno, Ultimo and Zero—are generally MIPS and should use
 
 OpenATV 8 images for Dreambox One also use `opkg` and IPK packages. On those images,
 `opkg print-architecture` includes `arm64`, so build and install the OpenATV
-package as `enigma2-plugin-extensions-e2xray_1.1.0_arm64.ipk`.
+package as `enigma2-plugin-extensions-e2xray_2.0.4_arm64.ipk`.
 
 The ARM64 build has been tested on Dreambox One. The MIPS little-endian build
 targets DM525/OpenDreambox 2.5 and is statically validated in GitHub Actions;
@@ -138,18 +138,18 @@ No separate Xray-core installation is required.
 Download the DEB/IPK matching the receiver's package architecture from the
 [e2xray Releases page](https://github.com/dreamboxone/e2xray/releases).
 
-Version `1.1.0` produces these packages:
+Version `2.0.4` produces these packages:
 
 ```text
-enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
-enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
-enigma2-plugin-extensions-e2xray_1.1.0_arm64.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-vfp-neon.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-neon.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_cortexa15hf-neon-vfpv4.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_mips-all.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_all.deb
+enigma2-plugin-extensions-e2xray_2.0.4_arm64.deb
+enigma2-plugin-extensions-e2xray_2.0.4_mipsel.deb
+enigma2-plugin-extensions-e2xray_2.0.4_arm64.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_armv7ahf-vfp-neon.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_armv7ahf-neon.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_cortexa15hf-neon-vfpv4.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_all.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_mips-all.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_all.deb
 ```
 
 The single `_all.deb` contains ARM64, ARMv7, mips32le and mips64le cores. Its
@@ -171,7 +171,7 @@ the matching core before Enigma2 is restarted.
 
 Do not use `_all.deb` on an `opkg` image and do not rename a DEB to IPK.
 
-## What's new in 1.1.0
+## What's new in 2.0.4
 
 **Ping is now a real-delay test.** Earlier versions measured a TCP connect to
 the proxy server, which only proved the edge host was reachable. The yellow
@@ -215,7 +215,7 @@ file manager.
 Example from Windows PowerShell:
 
 ```powershell
-scp .\enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb root@RECEIVER_IP:/tmp/
+scp .\enigma2-plugin-extensions-e2xray_2.0.4_arm64.deb root@RECEIVER_IP:/tmp/
 ```
 
 For a MIPS receiver, use the `_mipsel.deb` filename instead. Replace
@@ -226,13 +226,13 @@ For a MIPS receiver, use the `_mipsel.deb` filename instead. Replace
 On Dreambox One/Two:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_2.0.4_arm64.deb
 ```
 
 On DM520/DM525:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_2.0.4_mipsel.deb
 ```
 
 On GigaBlue ARMv7 with OpenPLi, OpenBH or OpenATV, first choose the filename
@@ -240,7 +240,7 @@ whose suffix is listed by
 `opkg print-architecture`, then install it with:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_ARCH.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_2.0.4_ARCH.ipk
 ```
 
 Alternatively, use the single `_all.ipk` ARMv7 package. Its pre-install script
@@ -250,13 +250,13 @@ installed; the post-install script then verifies that the embedded core runs.
 Recommended simple installation for an ARMv7 GigaBlue receiver:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_2.0.4_all.ipk
 ```
 
 The same ARMv7 package is recommended for ARM-based Vu+ 4K receivers:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_2.0.4_all.ipk
 ```
 
 For opkg-based little-endian MIPS receivers, use the single `_mips-all.ipk`
@@ -350,7 +350,7 @@ uname -m
 ```
 
 - برای ریسیورهای ARMv7 گیگابلو با OpenPLi، OpenBH یا OpenATV، بسته
-  `enigma2-plugin-extensions-e2xray_1.1.0_all.ipk` پیشنهاد می‌شود.
+  `enigma2-plugin-extensions-e2xray_2.0.4_all.ipk` پیشنهاد می‌شود.
 - برای مدل‌های 4K ویوپلاس مانند Solo 4K، Uno 4K/SE، Ultimo 4K، Zero 4K و
   Duo 4K/SE که پردازنده ARM دارند، بسته `_all.ipk` پیشنهاد می‌شود.
 - برای مدل‌های قدیمی‌تر و غیر 4K ویوپلاس با پردازنده MIPS، مانند Duo2،
@@ -365,7 +365,7 @@ uname -m
 فایل IPK را در مسیر `/tmp` کپی و اجرا کنید:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_2.0.4_all.ipk
 ```
 
 اگر نام معماری دقیق ریسیور را می‌دانید، می‌توانید به‌جای بسته عمومی از IPK
@@ -376,13 +376,13 @@ opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
 برای مدل‌های ARM خانواده 4K:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_2.0.4_all.ipk
 ```
 
 برای مدل‌های قدیمی‌تر دارای پردازنده MIPS:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_mips-all.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_2.0.4_mips-all.ipk
 ```
 
 پیش از نصب حتماً `uname -m` را بررسی کنید. خروجی `armv7l` به بسته ARMv7 و
@@ -485,13 +485,13 @@ opkg install iptables-module-xt-socket
 برای Dreambox One/Two:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_2.0.4_arm64.deb
 ```
 
 برای DM520/DM525:
 
 ```sh
-dpkg -i /tmp/enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
+dpkg -i /tmp/enigma2-plugin-extensions-e2xray_2.0.4_mipsel.deb
 ```
 
 ### ارتقا از نسخه قبلی
@@ -546,7 +546,7 @@ Check the service status and recent log messages:
 tail -n 100 /tmp/e2xray.log
 ```
 
-Version 1.1.0 also shows the concrete start failure on screen. `Error (3)` in
+Version 2.0.4 also shows the concrete start failure on screen. `Error (3)` in
 older versions is only Enigma2's numeric message-box type; it is not the Xray
 exit code.
 
@@ -579,7 +579,7 @@ killall opkg 2>/dev/null; sleep 2; rm -f /run/opkg.lock
 Then install normally:
 
 ```sh
-opkg install /tmp/enigma2-plugin-extensions-e2xray_1.1.0_ARCH.ipk
+opkg install /tmp/enigma2-plugin-extensions-e2xray_2.0.4_ARCH.ipk
 ```
 
 ### Receivers without TUN
@@ -666,7 +666,7 @@ ip route get 1.1.1.1
 
 The route to public addresses should use `e2xray0`. The proxy server itself
 must continue to use the receiver's physical network interface. On receivers
-whose BusyBox or kernel cannot use `ip rule`, version 1.1.0 automatically uses
+whose BusyBox or kernel cannot use `ip rule`, version 2.0.4 automatically uses
 the portable `0.0.0.0/1` and `128.0.0.0/1` split-default routes instead; this is
 reported as `TUN routing mode: split default routes` in `/tmp/e2xray.log`.
 
@@ -694,7 +694,7 @@ created, brings down its TUN interface and restores saved DNS/network settings.
 The existing `/root/config.txt` is preserved during a normal upgrade.
 
 Users upgrading specifically to fix the GigaBlue/OpenPLi routing error should
-install version 1.1.0 directly over the older version; uninstalling first is
+install version 2.0.4 directly over the older version; uninstalling first is
 not required.
 
 Upload the newer package to `/tmp`, then run either:
@@ -764,15 +764,15 @@ Build one auto-detecting DEB for ARM64, ARMv7, MIPS32LE and MIPS64LE:
 The outputs are:
 
 ```text
-enigma2-plugin-extensions-e2xray_1.1.0_arm64.deb
-enigma2-plugin-extensions-e2xray_1.1.0_mipsel.deb
-enigma2-plugin-extensions-e2xray_1.1.0_arm64.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-vfp-neon.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_armv7ahf-neon.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_cortexa15hf-neon-vfpv4.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_all.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_mips-all.ipk
-enigma2-plugin-extensions-e2xray_1.1.0_all.deb
+enigma2-plugin-extensions-e2xray_2.0.4_arm64.deb
+enigma2-plugin-extensions-e2xray_2.0.4_mipsel.deb
+enigma2-plugin-extensions-e2xray_2.0.4_arm64.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_armv7ahf-vfp-neon.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_armv7ahf-neon.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_cortexa15hf-neon-vfpv4.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_all.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_mips-all.ipk
+enigma2-plugin-extensions-e2xray_2.0.4_all.deb
 ```
 
 The build uses gzip for `control.tar.gz` and `data.tar.gz`. This is required
