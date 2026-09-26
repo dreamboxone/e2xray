@@ -1,0 +1,33 @@
+#!/bin/sh
+
+machine="$(uname -m 2>/dev/null || echo unknown)"
+case "$machine" in
+    armv7|armv7l|armv7*|armv8l|armv6*) ;;
+    *)
+        echo "e2xray: this universal IPK requires a 32-bit ARMv7 receiver." >&2
+        echo "Detected kernel architecture: $machine" >&2
+        exit 1
+        ;;
+esac
+
+features="$(
+    awk -F: 'tolower($1) ~ /^[[:space:]]*features[[:space:]]*$/ {
+        print tolower($2)
+        exit
+    }' /proc/cpuinfo 2>/dev/null || true
+)"
+if [ -n "$features" ]; then
+    # NEON on ARMv7 mandates VFPv3-D32, and plenty of receiver kernels advertise
+    # only "vfp"/"neon"/"vfpd32" without ever printing the literal "vfpv3".
+    # Refusing to install on those rejected perfectly capable boxes, and the
+    # on-screen file manager showed nothing but "installation failed".
+    case " $features " in
+        *" vfpv3 "*|*" vfpv3d16 "*|*" vfpv4 "*|*" neon "*|*" vfpd32 "*|*" vfp "*) ;;
+        *)
+            echo "e2xray: this ARMv7 CPU reports no VFP support; the bundled Xray core may not run." >&2
+            echo "Continuing anyway - remove the plugin if it does not start." >&2
+            ;;
+    esac
+fi
+
+exit 0

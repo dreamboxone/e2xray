@@ -1,0 +1,91 @@
+e2xray 1.7.0
+============
+
+Result of a full audit of the Python parser, the GUI, and the packaging and
+install pipeline. Everything below was reproduced before it was changed.
+
+Fixed: no VMess configuration could ever be used
+-------------------------------------------------
+In a VMess share link `type` is the *header obfuscation* ("none", "http") and
+`net` is the transport. The parser looked at `type` first:
+
+    first_value(values, ("type", "net"), "raw")
+
+v2rayN and v2rayNG always emit `"type":"none"`, so every real VMess link failed
+with `unsupported transport: none` - for every transport, tcp/ws/grpc/xhttp
+alike. The existing test happened to use a hand-written link with no `type` key
+at all, which is why it never caught this.
+
+Fixed: one bad line threw away every profile in the file
+---------------------------------------------------------
+`read_profiles` aborted on the first line it could not parse, and the GUI
+swallowed the error and showed "No Config. Found". A single unsupported link -
+a `hysteria2://` line, a provider's note, or (because of the bug above) any
+VMess link - made twenty working profiles disappear with no explanation.
+Unusable lines are now skipped and reported, and only a file with nothing usable
+is an error. A file whose first line is an unsupported protocol now says so
+instead of "invalid legacy configuration".
+
+Fixed: a legacy configuration displayed its own UUID as its name
+-----------------------------------------------------------------
+For KEY=VALUE configs the whole file was passed as the profile identity, and
+name extraction splits on "#" - so any comment line produced:
+
+    my home config SERVER_ADDRESS=1.2.3.4 SERVER_PORT=443 UUID=1111...
+
+on screen and in the runtime file. Such profiles are now named after their
+protocol and server address.
+
+Fixed: a corrupted selection file crashed the GUI
+---------------------------------------------------
+`read_selection` opens the file as ASCII and caught only IOError/OSError. A
+hand-edited or truncated file raises UnicodeDecodeError, which escaped out of an
+Enigma2 keypress handler on Start, Ping and OK.
+
+Fixed: an IPv6 card-sharing peer was decoded into somebody else's IPv4 address
+-------------------------------------------------------------------------------
+`/proc/net/tcp6` rows were assumed to be v4-mapped and reduced to their last
+32-bit word. A real IPv6 peer at `...:dead:beef` therefore became
+`222.173.190.239`, passed the public-address test, and was given a permanent
+bypass route and iptables RETURN rule belonging to an unrelated host. Only
+genuinely v4-mapped rows are reduced now.
+
+Fixed: Python 2 could die printing a Persian profile name
+-----------------------------------------------------------
+Output is redirected into the log, so stdout has no encoding and Python 2 falls
+back to ASCII; a Persian or Arabic name then raised UnicodeEncodeError. All such
+output now goes through a helper that encodes explicitly, and every error path
+that formats an exception message is non-ASCII safe.
+
+Fixed: installs were refused on capable receivers
+---------------------------------------------------
+Three independent aborts in the maintainer scripts, each of which shows up in an
+on-screen file manager as nothing more than "installation failed":
+
+  * ARMv7 install required the literal `vfpv3`/`vfpv3d16`/`vfpv4` in
+    /proc/cpuinfo. NEON on ARMv7 mandates VFPv3-D32, and many receiver kernels
+    advertise only `vfp`/`neon`/`vfpd32`. Those are accepted now, and an
+    unrecognised feature set warns instead of aborting.
+  * MIPS install aborted whenever the byte-order probe could not run. BusyBox
+    `od` frequently rejects the option form used, so "could not tell" was being
+    treated as "incompatible". Only a positively big-endian result aborts now.
+  * A 32-bit userland on ARMv8 reports `uname -m` = `armv8l`, which matched no
+    architecture arm and aborted in both preinst and postinst even though the
+    ARMv7 core runs there. `armv8l` and `armv6*` now map to the ARMv7 core.
+
+Fixed: the portable tar writer produced archives opkg may mis-handle
+---------------------------------------------------------------------
+Members were written without the `./` prefix that `tar -cf - .` produces on the
+native path, which some opkg versions require in order to track installed files.
+This only affects builds on a host without `ar`/`dpkg-deb`.
+
+Other
+-----
+  * Card-sharing process detection matched process names as a bare substring, so
+    short names such as `mbox` or `gbox` could match unrelated daemons and pull
+    their peers into the bypass. The match is anchored now.
+  * `cleanup_network_backend` assigned a variable named `backend` while being
+    called from inside `for backend in $backend_list`. POSIX sh has no locals,
+    so it overwrote the caller's loop variable. Renamed. A systematic sweep for
+    this class of collision across the whole control script found no other case
+    where a callee actually corrupts a value its caller still needs.

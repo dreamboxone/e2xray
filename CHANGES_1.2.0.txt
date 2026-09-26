@@ -1,0 +1,72 @@
+e2xray 1.2.0
+============
+
+Fixed: every TLS profile failed to start
+----------------------------------------
+Xray-core removed the "allowInsecure" TLS option in v26.2.6 and now REJECTS any
+configuration that still contains the key, regardless of whether it is set to
+true or false. proxy_config.py always emitted it, so on the bundled core
+(26.5.9) every vless+tls, trojan and vmess+tls profile died during config load:
+
+  Failed to start: ... infra/conf: Failed to build TLS config.
+  The feature "allowInsecure" has been removed and migrated to
+  "pinnedPeerCertSha256".
+
+Because the check happens before any backend is armed, all three backends (TUN,
+TPROXY, REDIRECT) failed in turn and the plugin reported CONFIG_INVALID. Only
+REALITY profiles were unaffected, which is why the failure looked random.
+
+  * "allowInsecure" is no longer written to the generated configuration.
+  * A share link may now carry "pinnedPeerCertSha256" (also accepted as
+    "pinnedPeerCertChainSha256" or "pinSHA256"), the supported replacement for
+    accepting a self-signed certificate.
+
+This was never related to the source obfuscation; the protected build had been
+loading and running correctly all along.
+
+Added: automatic card-sharing (OSCam/CCcam) bypass
+--------------------------------------------------
+Card-sharing daemons connect to their peers on arbitrary public addresses. Once
+a transparent backend captured every outbound connection, that traffic was
+pushed through the proxy too, where it is normally blocked - which is why
+encrypted channels stopped opening while e2xray was running.
+
+Peers are now discovered automatically at start time, from two independent
+sources, and kept entirely outside the tunnel. Nothing has to be configured.
+
+  * Process based: the live sockets owned by a running oscam, cccam, mgcamd,
+    ncam, gbox, camd3, newcs, wicardd (and similar) process are read from
+    /proc and their remote endpoints are bypassed exactly.
+  * Configuration based: CCcam.cfg (C:/N: lines), oscam.server / ncam.server
+    (device = host,port) and newcamd/mgcamd lists (CWS = host port) are parsed
+    and their peers resolved, so readers that are momentarily disconnected are
+    covered too.
+
+The discovered addresses and ports are then excluded at every layer:
+
+  * TUN      - host routes via the physical interface in both the policy-table
+               and split-default modes, plus an fwmark bypass table for
+               port matches.
+  * TPROXY   - RETURN rules in the mangle mark chain, TCP and UDP.
+  * REDIRECT - RETURN rules in the nat chain.
+  * Xray     - a routing rule sending those addresses to the direct outbound,
+               as a last line of defence.
+
+Discovery runs before the tunnel is armed, so peer names resolve with the
+receiver's untouched resolver. Every layer degrades gracefully: an image without
+mangle or ip rule simply keeps the host routes.
+
+New diagnostic command:
+
+    e2xrayctl.sh softcam
+
+prints the peers and ports that will be kept outside the tunnel, without
+starting anything.
+
+Tests
+-----
+  * The TUN inbound test asserted an uppercase "MTU" field and had been failing;
+    Xray-core spells it lowercase "mtu". Corrected.
+  * Added coverage for allowInsecure never being emitted, pinnedPeerCertSha256
+    passthrough, the card-sharing routing rule, public-address classification
+    and /proc/net/tcp address decoding.

@@ -1,0 +1,97 @@
+e2xray 1.5.0
+============
+
+Fixed: a running start could be switched to a different profile mid-flight
+---------------------------------------------------------------------------
+From a user log, one single start, with اضطراری2 selected throughout:
+
+    14:00:43 Attempting network backend: TUN
+             PINNED_SERVER=cd0.basalamdigikala....top      <- the selected one
+    14:02:28 Attempting network backend: REDIRECT
+             PINNED_SERVER=cdn2.iranmobile1.cfd            <- a different one
+    14:02:30 Real delay test failed for VIP2
+
+`ping` is deliberately not serialised against `start`, because the UI must stay
+responsive. But it reached `config_present` -> `load_userconf`, which rewrites
+the live core configuration `/etc/e2xray/config.json`. Pressing Ping while a
+start was in progress therefore replaced the configuration under the running
+start, and the next backend attempt came up on a completely different server -
+one for which no bypass route or iptables RETURN rule had been installed.
+
+Read-only callers now generate into private scratch files and only `start` may
+write the live configuration.
+
+Fixed: a dead server cost two and a half minutes of no connectivity
+--------------------------------------------------------------------
+When the health check reported TUNNEL_DEAD the start loop moved on to the next
+backend and repeated the whole 50-second probe, three times over. But
+TUNNEL_DEAD specifically means the capture layer worked and the server answered
+nothing, so the remaining backends were always going to fail the same way. The
+loop now stops at the first TUNNEL_DEAD and restores networking immediately.
+
+Fixed: IPv6 was never captured
+-------------------------------
+There was no `ip -6`, no `ip6tables` and no v6 address on the TUN interface
+anywhere in the plugin. On any connection that offers IPv6 - which most mobile
+and many fixed-line providers now do - the kernel prefers it for every
+AAAA-capable destination, so the traffic left the receiver natively while the
+plugin reported a healthy tunnel. The probes used to verify the tunnel are
+themselves dual-stack, so they could succeed *through the leak*.
+
+  * TUN backend: the interface now also gets fdfe:e2e2::1/64 and IPv6 is
+    policy-routed into the tunnel with exactly the IPv4 precedence -
+    priority 999 for the core's own sockets, 1001 for everything else.
+  * TPROXY and REDIRECT: IPv6 cannot be captured there, so it is blackholed
+    for as long as the tunnel runs rather than left leaking.
+  * Stop reverts both paths completely, and the marker file counts as runtime
+    state so Stop can still recover after a crash.
+
+Fixed: every visited domain was resolved in cleartext outside the tunnel
+-------------------------------------------------------------------------
+Routing used `domainStrategy: "IPIfNonMatch"`. Sniffing hands the routing engine
+a domain, and IPIfNonMatch has to resolve that domain locally just to test the
+IP-only rules. Those lookups are the core's own sockets, which every backend
+deliberately routes around the tunnel - so the receiver emitted a cleartext DNS
+query to 8.8.8.8 for every site it visited, handing its full browsing history to
+exactly the network the plugin exists to hide from.
+
+Now `AsIs`. Nothing is lost: private and card-sharing destinations never reach
+the core at all, because the OS-level routes and iptables RETURN rules already
+send them out directly.
+
+Fixed: a poisoned answer was sent out direct instead of being dropped
+----------------------------------------------------------------------
+The filtering sinkhole 10.10.34.0/24 sits inside 10.0.0.0/8, so a poisoned
+resolution matched the private-network rule and was sent to the `direct`
+outbound - the request for the blocked site left the receiver in the clear and
+landed on the filtering page while the tunnel reported itself healthy. The
+sinkhole is now blackholed by a rule placed ahead of the private-network rule.
+
+Fixed: a card-sharing peer on a shared port disabled the whole tunnel
+----------------------------------------------------------------------
+Card-sharing port bypasses cannot be qualified by destination address - they
+have to keep working when a reader reconnects to a different address of the
+same dynamic name. That makes them blunt: a peer configured as
+
+    C: peer.example.com 443 user pass
+
+produced `--dport 443 -j RETURN`, which pushed **all HTTPS traffic** outside the
+tunnel. Ports that carry ordinary traffic (below 1024, plus 443, 8080, 8443,
+853, 3128, 1080, 8888, 5228) are no longer bypassed by port alone; such a peer
+is still covered by its discovered address, and the refusal is logged.
+
+Also fixed: build-release.sh invoked build.sh directly, which fails with
+"Permission denied" whenever the repository sits on a filesystem that does not
+carry the execute bit - the normal case on Windows. It is now invoked through
+`sh`.
+
+Known and deliberately unchanged
+---------------------------------
+  * The REDIRECT backend captures TCP only; UDP stays direct. That is inherent
+    to iptables REDIRECT and it is the last-resort backend. It is logged.
+  * With TPROXY, a failure to install the DNS redirect is logged but not fatal.
+    Making it fatal would leave images that have mangle but no usable nat table
+    with no backend at all, and sniffing still recovers the hostname at the
+    server, so those profiles keep working.
+  * If the core is killed while TUN is active the tunnel fails open rather than
+    closed. Changing that is a policy decision that has not been taken.

@@ -1,0 +1,40 @@
+e2xray 1.0.1
+
+Network backend selection is automatic and ordered:
+1. TUN (preferred)
+2. TPROXY transparent proxy (TCP + UDP)
+3. iptables REDIRECT fallback (TCP only; UDP remains direct)
+
+Highlights:
+- TUN absence no longer aborts startup immediately.
+- If TUN starts but routing fails, startup rolls back and tries TPROXY/REDIRECT.
+- Xray outbound is bound to the physical interface to reduce routing-loop risk.
+- Transparent modes preserve the receiver's system DNS.
+- Detailed backend logging and error codes:
+  TUN_CREATE_FAILED, TUN_LINK_FAILED, TUN_ADDRESS_FAILED,
+  ROUTE_TABLE_FAILED, IP_RULE_FAILED, SERVER_BYPASS_ROUTE_FAILED,
+  TPROXY_SETUP_FAILED, REDIRECT_SETUP_FAILED, BACKEND_CONFIG_FAILED,
+  NO_NETWORK_BACKEND.
+- Start/Stop idempotency and the control lock from 1.0.0 are preserved.
+- Protected build remains mandatory by default: Python obfuscation, bytecode
+  removal, RSA/SHA-256 installed-file integrity, and detached package signing.
+
+Tests added/updated:
+- parser/config backend conversion tests
+- DNS behavior tests for transparent mode
+- TUN routing tests
+- TPROXY/REDIRECT rule-generation tests
+
+Connectivity indicators:
+- Added a separate Network status lamp. It is green only when the receiver has
+  a usable IPv4 address on a real network interface; loopback, link-local and
+  e2xray0 addresses do not count.
+- Internet status no longer depends on dash.cloudflare.com alone.
+- Internet checks now use independent Google, Cloudflare and Apple HTTPS
+  probes. One successful probe is enough to report ONLINE.
+- If all probes fail, e2xray waits two seconds and retries before reporting
+  OFFLINE, reducing false red status immediately after VPN route changes.
+- Connectivity diagnostics are written to /tmp/e2xray.log with [NETWORK] and
+  [INTERNET] prefixes, including selected interface/IP and per-probe results.
+- Missing TUN is no longer shown as a fatal GUI warning because 1.0.1 can
+  automatically fall back to TPROXY or TCP REDIRECT.

@@ -4,7 +4,11 @@ PLUGIN_DIR="/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 CORE_DIR="/usr/lib/e2xray"
 RUNTIME_DIR="/var/run/e2xray"
 CONFIG_DIR="/etc/e2xray"
-USER_CONFIG="/root/config.txt"
+if [ -d /root ]; then
+    USER_CONFIG="/root/config.txt"
+else
+    USER_CONFIG="/home/root/config.txt"
+fi
 LOG_FILE="/tmp/e2xray.log"
 
 remove_init_links() {

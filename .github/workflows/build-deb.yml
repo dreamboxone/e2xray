@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+# CI artifacts are development builds; official releases are signed locally.
+env:
+  E2XRAY_ALLOW_UNPROTECTED: "1"
+
 jobs:
   validate:
     name: Validate source and embedded cores
@@ -40,6 +44,7 @@ jobs:
 
           arm_core="cores/arm64/xray"
           mips_core="cores/mipsel/xray"
+          mips64_core="cores/mips64le/xray"
 
           readelf -h "$arm_core" | grep -Eq 'Class:[[:space:]]+ELF64'
           readelf -h "$arm_core" |
@@ -52,6 +57,11 @@ jobs:
             grep -Eq "Data:.*2's complement, little endian"
           readelf -h "$mips_core" | grep -Eq 'Machine:.*MIPS'
 
+          readelf -h "$mips64_core" | grep -Eq 'Class:[[:space:]]+ELF64'
+          readelf -h "$mips64_core" |
+            grep -Eq "Data:.*2's complement, little endian"
+          readelf -h "$mips64_core" | grep -Eq 'Machine:.*MIPS'
+
       - name: Validate Python and shell files
         shell: bash
         run: |
@@ -63,8 +73,10 @@ jobs:
 
           python3 -m py_compile "$plugin" "$parser"
           bash -n build.sh DEBIAN/postinst DEBIAN/prerm DEBIAN/postrm \
-            etc/init.d/e2xray "$ctl"
+            packaging/armv7-universal/preinst \
+            packaging/mips-universal/preinst etc/init.d/e2xray "$ctl"
           python3 tests/test_proxy_config.py
+          sh tests/test_routing.sh
 
       - name: Validate Internet status check
         shell: bash
@@ -75,7 +87,7 @@ jobs:
           plugin="usr/lib/enigma2/python/Plugins/Extensions/e2xray/plugin.py"
           ! grep -qi 'arvancloud' "$ctl" README.md
           ! grep -q 'E2XRAY_NET=NATIONAL' "$ctl" "$plugin"
-          grep -q 'https://dash.cloudflare.com' "$ctl"
+          grep -q 'https://www.google.com/generate_204' "$ctl"
 
   build:
     name: Build ${{ matrix.architecture }} DEB
@@ -280,9 +292,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        architecture:
-          - armv7ahf-vfp-neon
-          - armv7ahf-neon
+        include:
+          - target: armv7ahf-vfp-neon
+            architecture: armv7ahf-vfp-neon
+          - target: armv7ahf-neon
+            architecture: armv7ahf-neon
+          - target: cortexa15hf-neon-vfpv4
+            architecture: cortexa15hf-neon-vfpv4
+          - target: armv7-universal
+            architecture: all
 
     steps:
       - name: Check out source
@@ -330,7 +348,9 @@ jobs:
           readelf -h cores/armv7/xray |
             grep -Eq 'Machine:.*ARM'
 
-          sha256sum cores/armv7/xray >> cores/SHA256SUMS
+          core_hash="$(sha256sum cores/armv7/xray | awk '{print $1}')"
+          sed -i '\|  cores/armv7/xray$|d' cores/SHA256SUMS
+          printf '%s  %s\n' "$core_hash" cores/armv7/xray >> cores/SHA256SUMS
 
       - name: Read package metadata
         id: package
@@ -367,7 +387,7 @@ jobs:
 
           ./build.sh \
             ipk \
-            "${{ matrix.architecture }}" \
+            "${{ matrix.target }}" \
             "$GITHUB_WORKSPACE/dist"
 
       - name: Inspect package
@@ -396,6 +416,12 @@ jobs:
           grep -qx \
             "Architecture: ${{ matrix.architecture }}" \
             "$control/control"
+
+          if [ "${{ matrix.architecture }}" = "all" ]; then
+            test -x "$control/preinst"
+            grep -q 'armv7' "$control/preinst"
+            grep -q 'vfpv3' "$control/preinst"
+          fi
 
           ar p "$package" data.tar.gz |
             tar -xz -C "$extracted"
@@ -469,8 +495,8 @@ jobs:
 
           ls -l dist
           test "$(find dist -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 2
-          test "$(find dist -maxdepth 1 -type f -name '*.ipk' | wc -l)" -eq 3
-          test "$(find dist -maxdepth 1 -type f -name '*.sha256' | wc -l)" -eq 5
+          test "$(find dist -maxdepth 1 -type f -name '*.ipk' | wc -l)" -eq 5
+          test "$(find dist -maxdepth 1 -type f -name '*.sha256' | wc -l)" -eq 7
 
       - name: Upload all packages
         uses: actions/upload-artifact@v6

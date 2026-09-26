@@ -1,0 +1,9 @@
+e2xray 2.0.4
+
+Detect the receiver's root home directory consistently during installation,
+profile loading and removal. Use /root/config.txt when /root is a directory;
+otherwise create and read /home/root/config.txt. Preserve existing contents
+and create new files with mode 0600.
+
+Packages no longer ship a fixed /root directory, so unpacking cannot change
+the directory detection. Configuration errors display the actual selected path.

@@ -1,0 +1,94 @@
+e2xray 1.1.0
+============
+
+Real delay replaces tcping
+--------------------------
+The yellow button used to open a TCP connection to the proxy server and report
+how long the handshake took. That only proves the edge host answers; it says
+nothing about whether the tunnel carries traffic. e2xray now starts a temporary
+Xray instance with a local SOCKS inbound, sends a real HTTP request through the
+selected configuration and reports the round trip.
+
+Measured on a Dreambox One with the same profile:
+  old TCP connect .... 7 ms
+  real delay ....... 371 ms
+
+The probe binds a random loopback port, tags its outbound with the self fwmark
+so the transparent chains cannot capture it, and always kills the temporary
+instance. A complete test takes about 0.7 s.
+
+Transparent backends now actually carry traffic
+-----------------------------------------------
+TPROXY and REDIRECT existed in 1.0.1 but were incomplete in three ways that
+each broke censorship circumvention on receivers without TUN:
+
+- No sniffing. A transparent inbound only sees the destination IP that the
+  receiver already resolved locally. Without recovering the hostname from the
+  HTTP/TLS/QUIC handshake, a filtered resolver decided where every connection
+  really went. destOverride is now enabled on every inbound.
+
+- DNS never entered the tunnel. Both transparent modes deliberately kept the
+  receiver's resolver and installed no rule for port 53. A dedicated dns-in
+  inbound now listens on 127.0.0.1:15353, TCP and UDP port 53 are redirected
+  into it, and a routing rule sends it to the proxy outbound.
+
+- Xray's own transport could be recaptured. Loop protection relied only on a
+  /32 bypass for the resolved server address, which fails for domain or CDN
+  endpoints. Every outbound is now tagged with fwmark 255 and each chain
+  returns on that mark before any capturing rule.
+
+Verified live on real hardware for both backends: TCP, UDP and DNS confirmed
+flowing through transparent-in and dns-in, with genuine upstream DNS answers.
+
+Fixes
+-----
+- The DNS inbound listens on 15353. Port 5353 is mDNS and avahi-daemon already
+  owns it on most Enigma2 images, which made the core fail with EADDRINUSE.
+- Cleanup loops that drained ip rules are bounded to 16 attempts. A BusyBox ip
+  that returns success for an unsupported subcommand would otherwise spin
+  forever, hanging Stop and leaving the receiver without networking.
+- /usr/sbin and /sbin are prepended to PATH before capability probing, so ip
+  and iptables are not reported missing merely because of a restricted
+  environment.
+- The freedom outbound is no longer bound to the physical interface; only the
+  proxy transport is. Binding it broke loopback and LAN traffic that routing
+  deliberately sends direct.
+- Transparent backends that die during startup now report the core's actual
+  error instead of a generic message.
+- network-backend was missing from the plugin's runtime markers, so Stop could
+  become a no-op after a crash and leave iptables rules installed.
+
+Diagnostics and user interface
+------------------------------
+- All 18 control-layer error codes have translated explanations in English,
+  Persian and Arabic, each naming the next step. The English detail is kept in
+  parentheses for support.
+- NO_NETWORK_BACKEND names the missing component instead of describing the
+  situation generically.
+- The active backend is shown next to Configurations and in the start message.
+
+Receivers without TUN
+---------------------
+Several Vu+ and other OE-Alliance images ship neither the TUN driver nor
+iptables, although their feed carries both. A Vu+ Zero 4K on kernel 4.1.20
+reports no /dev/net/tun and no iptables command at all; no plugin change can
+work around that. e2xray now says exactly what to install:
+
+  opkg update && opkg install kernel-module-tun iptables iptables-modules \
+      iptables-module-xt-tproxy iptables-module-xt-socket iproute2
+
+A reboot is required afterwards. IPK packages now recommend iptables and
+iptables-modules in addition to kernel-module-tun and iproute2.
+
+Tests
+-----
+- tests/test_transparent.sh is new and asserts iptables rule ordering: the DNS
+  chain must be attached before the catch-all redirect, and the self-mark
+  bypass must precede every capturing rule.
+- Existing routing, DNS and connectivity suites pass unchanged.
+
+Protection
+----------
+Unchanged. Protected builds remain mandatory by default: Python obfuscation,
+bytecode removal, RSA/SHA-256 installed-file integrity and detached package
+signing.

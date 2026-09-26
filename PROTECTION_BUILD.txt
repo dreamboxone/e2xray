@@ -1,0 +1,68 @@
+e2xray 1.0.0 - protected release build
+======================================
+
+Protection is now ON BY DEFAULT
+--------------------------------
+Every normal build requires the RSA private signing key and produces:
+- obfuscated __init__.py, plugin.py and proxy_config.py inside the package
+- no source-tree __pycache__, .pyc or .pyo files in the package
+- signed SHA-256 integrity manifest for installed plugin code, branding,
+  control shell/init files and bundled Xray core(s)
+- runtime integrity verification before Xray Start
+- final .deb/.ipk SHA-256 sidecar
+- final .deb/.ipk detached RSA signature
+- e2xray-signing-public.pem for verification
+
+The source repository itself stays readable for development. Obfuscation happens
+only in the temporary build staging directory.
+
+Private key
+-----------
+The default key location is:
+  ~/.e2xray-keys/e2xray-signing.pem
+
+This is the key already created for official e2xray builds. Keep it outside the
+project and never commit or distribute it.
+
+Normal protected build
+----------------------
+cd /mnt/d/e2xray
+./build.sh deb arm64 dist
+
+The old explicit form still works:
+E2XRAY_PROTECT=1 \
+E2XRAY_SIGNING_KEY="$HOME/.e2xray-keys/e2xray-signing.pem" \
+./build.sh deb arm64 dist
+
+Build every supported release package
+-------------------------------------
+cd /mnt/d/e2xray
+./build-all.sh dist
+
+Unprotected development build
+-----------------------------
+There is no accidental unprotected release path. For a local development-only
+package, the explicit escape hatch is required:
+  E2XRAY_ALLOW_UNPROTECTED=1 ./build.sh deb arm64 dist-dev
+
+Do not distribute an unprotected development package.
+
+Verify a package
+----------------
+cd dist
+sha256sum -c enigma2-plugin-extensions-e2xray_1.0.0_arm64.deb.sha256
+openssl dgst -sha256 \
+  -verify e2xray-signing-public.pem \
+  -signature enigma2-plugin-extensions-e2xray_1.0.0_arm64.deb.sig \
+  enigma2-plugin-extensions-e2xray_1.0.0_arm64.deb
+
+Expected OpenSSL result:
+  Verified OK
+
+Security boundary
+-----------------
+A client package running on a receiver where the user has root access cannot be
+made mathematically impossible to reverse engineer or patch. e2xray 1.0.0 raises
+the effort substantially and makes ordinary modifications detectable. The RSA
+private key is never present in the package, so a modified package cannot be
+re-signed as an official release without that private key.

@@ -1,0 +1,69 @@
+e2xray 1.3.0
+============
+
+Fixed: the Settings menu stopped responding in Persian and Arabic
+------------------------------------------------------------------
+Selecting Persian (or Arabic) made the "Language" and "About" entries dead:
+pressing OK did nothing at all, so the language could not even be changed back.
+
+The settings menu dispatched on the label text:
+
+    current = self["menu"].getCurrent()
+    if current == self.labels[0]:      # "Language" / "زبان"
+
+On the Python 2 images this fails for every non-Latin script. The listbox hands
+back a unicode object while self.labels still holds UTF-8 byte strings, so
+Python tries to decode the bytes as ASCII, gives up, and returns False. ASCII
+labels ("Language", "About") compared equal, which is exactly why the menu
+worked in English and nowhere else.
+
+The menu now dispatches on the row index instead of the translated text, with a
+representation-independent text comparison as a fallback for Enigma2 builds
+that expose no index accessor.
+
+Fixed: "No Configuration Selected" on a fresh install
+-----------------------------------------------------
+A new installation had profiles in /root/config.txt but no selection recorded,
+so the very first press of Start failed even though a perfectly usable profile
+was listed on screen. The first profile is now adopted automatically whenever
+no valid selection exists - at install time, when the plugin screen opens, and
+again as a safety net when Start runs.
+
+Pressing OK on the already-selected profile is now a no-op. It used to clear
+the selection, producing the same dead-end state by hand.
+
+Changed: the installer no longer leaves the package in /tmp
+------------------------------------------------------------
+/tmp is a RAM disk on these receivers and the package is between 12 and 60 MB.
+postinst now removes the installed .deb/.ipk and its .sha256/.sig companions
+once the files are unpacked.
+
+Added: environment header in the log
+-------------------------------------
+Every start now writes a block that makes a user-submitted log self-contained:
+
+    [ENV] e2xray 1.3.0
+    [ENV] Receiver: boxtype=vuduo4kse vumodel=duo4kse model=vuplus
+    [ENV] Image: openATV 7.5  Packages: opkg
+    [ENV] Arch: aarch64  Kernel: 4.1.20
+    [ENV] Python: python3 3.12.4
+    [ENV] Core: Xray 26.5.9 (Xray, Penetrates Everything.) ...
+
+The plugin version is read from a new plain-text file, /usr/lib/e2xray/version,
+written at build time - __init__.py is obfuscated in a protected build and
+cannot be read back on the receiver.
+
+The log is also capped now. It lives on the RAM disk, so it is trimmed to the
+last 400 lines once it passes 256 KB.
+
+New support commands:
+
+    e2xrayctl.sh env            print the environment block on demand
+    e2xrayctl.sh select-first   adopt the first profile in config.txt
+
+Tests
+-----
+Added coverage for ensure_selection: adopting the first profile when nothing is
+selected, never overriding a valid selection, recovering from a stale selection
+whose profile was removed from config.txt, and returning nothing for an empty
+profile list.

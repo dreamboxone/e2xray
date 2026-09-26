@@ -1,0 +1,80 @@
+#!/bin/sh
+
+machine="$(uname -m 2>/dev/null || echo unknown)"
+
+check_armv7_features() {
+    features="$(
+        awk -F: 'tolower($1) ~ /^[[:space:]]*features[[:space:]]*$/ {
+            print tolower($2)
+            exit
+        }' /proc/cpuinfo 2>/dev/null || true
+    )"
+    [ -n "$features" ] || return 0
+    # NEON on ARMv7 mandates VFPv3-D32, and plenty of receiver kernels advertise
+    # only "vfp"/"neon"/"vfpd32" without ever printing the literal "vfpv3".
+    # Refusing to install on those was rejecting perfectly capable boxes, with
+    # no explanation the user could act on.
+    case " $features " in
+        *" vfpv3 "*|*" vfpv3d16 "*|*" vfpv4 "*|*" neon "*|*" vfpd32 "*|*" vfp "*)
+            return 0
+            ;;
+    esac
+    echo "e2xray: this ARMv7 CPU reports no VFP support; the bundled Xray core may not run." >&2
+    echo "Continuing anyway - remove the plugin if it does not start." >&2
+    return 0
+}
+
+check_mips_byte_order() {
+    case "$machine" in
+        mipsel|mipsle|mips32el|mips32le|mips64el|mips64le)
+            byte_order="little"
+            ;;
+        *)
+            byte_order="$(
+                awk -F: 'tolower($1) ~ /(byteorder|endianness|endian)/ {
+                    print tolower($2)
+                    exit
+                }' /proc/cpuinfo 2>/dev/null || true
+            )"
+            ;;
+    esac
+
+    case "$byte_order" in
+        *little*) return 0 ;;
+        *big*)
+            echo "e2xray: big-endian MIPS is not supported by this package." >&2
+            exit 1
+            ;;
+    esac
+
+    shell_path="$(readlink -f /bin/sh 2>/dev/null || echo /bin/sh)"
+    elf_data="$(
+        od -An -j 5 -N 1 -tu1 "$shell_path" 2>/dev/null |
+            tr -d '[:space:]' || true
+    )"
+    case "$elf_data" in
+        1) return 0 ;;
+        2)
+            echo "e2xray: this receiver is big-endian MIPS, which is not supported." >&2
+            exit 1
+            ;;
+    esac
+    # BusyBox od often rejects the option form used above, so an empty result
+    # means "could not tell", not "incompatible". Big-endian MIPS receivers are
+    # vanishingly rare; aborting the install here blocked healthy boxes.
+    echo "e2xray: could not confirm MIPS byte order; assuming little-endian." >&2
+    return 0
+}
+
+case "$machine" in
+    aarch64|arm64) ;;
+    armv7|armv7l|armv7*|armv8l|armv6*) check_armv7_features ;;
+    mips*) check_mips_byte_order ;;
+    *)
+        echo "e2xray: unsupported receiver architecture: $machine" >&2
+        echo "Supported: ARM64, ARMv7 with VFPv3/VFPv4, MIPS32LE and MIPS64LE." >&2
+        exit 1
+        ;;
+esac
+
+exit 0

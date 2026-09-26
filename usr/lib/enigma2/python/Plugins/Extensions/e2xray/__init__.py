@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 
-PLUGIN_VERSION = "0.6.0"
+PLUGIN_VERSION = "2.0.4"

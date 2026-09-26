@@ -1,0 +1,76 @@
+e2xray 1.9.0
+============
+
+Closes the audit. Everything decided has been implemented; what remains is
+listed at the end as known and accepted, not as an oversight.
+
+Added: the supervisor also watches the receiver's network
+-----------------------------------------------------------
+Every bypass the tunnel depends on is written against the gateway that existed
+when the tunnel started: the private table's default route, the proxy server's
+host routes, the card-sharing host routes. A new DHCP lease, a move to another
+Wi-Fi network, or a switch from Wi-Fi to cable leaves all of them pointing at an
+address that is no longer reachable. The transport then black-holes silently -
+the core is still running, so nothing reported a problem, and the interface
+still said the tunnel was up.
+
+The watchdog now compares the current default interface, gateway and receiver
+address against the values recorded at start. A confirmed change rebuilds the
+tunnel against the new gateway:
+
+    [WATCHDOG] The receiver's network changed; rebuilding the tunnel for the
+               new gateway.
+
+The receiver's own address is compared as well, because two different networks
+can easily use the same router address. A change must be observed on two
+consecutive checks before anything happens, so a brief flap during a DHCP
+renewal does not cause a needless rebuild, and a momentarily absent default
+route or an interface that has no address yet are both treated as flaps rather
+than as changes.
+
+Fixed: the two Python versions disagreed about what a port is
+---------------------------------------------------------------
+The patterns that read peer ports out of the softcam configuration used "\d",
+which on Python 3 also matches Arabic-Indic digits but on Python 2 does not.
+Pinned to ASCII.
+
+Decided: DNS stays inside the tunnel
+--------------------------------------
+The DNS redirect captures queries aimed at the local router as well, so purely
+local names do not resolve while a transparent backend is active. Keeping every
+query inside the tunnel is the deliberate choice: it is what makes the plugin
+resistant to DNS poisoning, which is the reason it exists.
+
+Known and accepted
+-------------------
+Each of these was found during the audit, reproduced, and consciously left as
+it is. They are recorded here so they are not rediscovered as new bugs.
+
+  * The REDIRECT backend captures TCP only; UDP stays direct. That is inherent
+    to iptables REDIRECT, and REDIRECT is the last-resort backend.
+  * With TPROXY, failing to install the DNS redirect is logged but not fatal.
+    Making it fatal would leave images that have mangle but no usable nat table
+    with no backend at all, and sniffing still recovers the hostname at the
+    server.
+  * ICMP is not captured by the transparent backends - the TPROXY target cannot
+    carry it. Blocking it instead would break the plugin's own reachability
+    probe.
+  * The transparent inbound listens on 0.0.0.0:12345 with no INPUT protection.
+    A filter rule there risks breaking TPROXY delivery, and a connection with no
+    original destination is rejected by the core anyway. The DNS inbound is
+    already bound to 127.0.0.1.
+  * Local names do not resolve under a transparent backend, per the decision
+    above.
+
+Needs a receiver to settle
+---------------------------
+Two findings could not be confirmed without hardware, and are left untouched
+rather than fixed blind:
+
+  * Reply packets to connections that arrived from outside are matched by the
+    same OUTPUT and policy rules as locally originated traffic, so remote access
+    to a port-forwarded OpenWebif, FTP or SSH may hang while TPROXY or TUN
+    policy routing is active. REDIRECT is immune.
+  * Connections already established when the tunnel starts: REDIRECT keeps them
+    outside the tunnel for their whole lifetime, TPROXY captures them mid-stream
+    and they stall until they time out. Nothing flushes conntrack.

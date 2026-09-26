@@ -1,0 +1,46 @@
+e2xray 1.6.0
+============
+
+Changed: the tunnel now fails closed, with a supervisor that recovers
+----------------------------------------------------------------------
+The Xray core is an ordinary process and it can die without warning - the
+out-of-memory killer is a realistic trigger on a receiver with little RAM
+running a 34 MB Go binary.
+
+Until now that failed *open*. All traffic is routed onto e2xray0, so when the
+core died the interface and its default route disappeared together, the lookup
+in table 101 found nothing, and the kernel simply fell through to the main
+table. Everything carried on working - straight out through the ISP, in the
+clear, with the receiver's real address - while the user still believed the
+tunnel was up. The same applied to the split-default fallback, whose two /1
+routes are device routes and vanish with the device.
+
+Two changes, which only make sense together:
+
+  * **Fail closed.** A higher-metric `unreachable` route now backs the tunnel
+    route in table 101 (and the same for the two /1 routes in split mode, and
+    for IPv6). It never competes with the tunnel while the tunnel is up, and it
+    keeps the table authoritative the moment the tunnel route goes away. Nothing
+    escapes unprotected.
+
+  * **A supervisor that recovers.** Failing closed on its own would leave the
+    receiver with no internet until somebody walked over to it. A small detached
+    watchdog now checks the core every 10 seconds while the tunnel is meant to
+    be up; if the core is gone it runs a full, ordinary stop - restoring the
+    routes, the DNS, the iptables chains and IPv6 - and writes the reason to the
+    log:
+
+        [WATCHDOG] The Xray core is no longer running; restoring normal networking.
+
+    A deliberate Stop shuts the supervisor down first, so it never races with
+    the user, and it clears the inherited EXIT trap so it cannot release the
+    control lock its parent is holding.
+
+Card-sharing is unaffected in every one of these states: the OSCam/CCcam bypass
+goes through its own policy table and host routes and never depended on the
+tunnel interface, so encrypted channels keep working even while everything else
+is sealed.
+
+If an image's `ip` cannot install an unreachable route, the seal is skipped and
+that is written to the log rather than failing the start - such a receiver is
+back to the old fail-open behaviour and the log now says so explicitly.

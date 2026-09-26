@@ -1,19 +1,83 @@
 #!/bin/sh
 PLUGIN_DIR=/usr/lib/enigma2/python/Plugins/Extensions/e2xray
 OLD_USERCONF=/etc/e2xray/server.conf
-USERCONF=/root/config.txt
+if [ -d /root ]; then
+    USER_HOME=/root
+else
+    USER_HOME=/home/root
+fi
+USERCONF=$USER_HOME/config.txt
 
 rm -f "$PLUGIN_DIR/"*.pyc "$PLUGIN_DIR/"*.pyo 2>/dev/null || true
 rm -rf "$PLUGIN_DIR/__pycache__" 2>/dev/null || true
 chmod 755 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh 2>/dev/null || true
 chmod 755 /etc/init.d/e2xray 2>/dev/null || true
+
+ARM64_CORE=/usr/lib/e2xray/bin/xray-arm64
+ARMV7_CORE=/usr/lib/e2xray/bin/xray-armv7
+MIPS32_CORE=/usr/lib/e2xray/bin/xray-mips32le
+MIPS64_CORE=/usr/lib/e2xray/bin/xray-mips64le
+if [ -f "$ARM64_CORE" ] || [ -f "$ARMV7_CORE" ] ||
+    [ -f "$MIPS32_CORE" ] || [ -f "$MIPS64_CORE" ]; then
+    machine="$(uname -m 2>/dev/null || echo unknown)"
+    case "$machine" in
+        aarch64|arm64) selected_core="$ARM64_CORE" ;;
+        armv7|armv7l|armv7*|armv8l|armv6*) selected_core="$ARMV7_CORE" ;;
+        mips64*) selected_core="$MIPS64_CORE" ;;
+        mips*) selected_core="$MIPS32_CORE" ;;
+        *)
+            echo "e2xray: the universal package cannot run on $machine." >&2
+            exit 1
+            ;;
+    esac
+    if [ ! -f "$selected_core" ]; then
+        echo "e2xray: the required Xray core is missing: $selected_core" >&2
+        exit 1
+    fi
+    chmod 755 /usr/lib/e2xray/bin/xray-* 2>/dev/null || true
+    ln -sf "$(basename "$selected_core")" /usr/lib/e2xray/bin/xray
+    echo "e2xray: selected $(basename "$selected_core") for $machine"
+fi
+
 chmod 755 /usr/lib/e2xray/bin/xray 2>/dev/null || true
+
+# Protected releases verify their signed installed-file manifest immediately
+# after architecture selection. This catches corrupted/modified package content
+# before Enigma2 is restarted or Xray is allowed to run.
+INTEGRITY_VERIFY=/usr/lib/e2xray/protection/integrity_verify.py
+if [ -f "$INTEGRITY_VERIFY" ]; then
+    VERIFY_PYTHON=""
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            VERIFY_PYTHON="$candidate"
+            break
+        fi
+    done
+    if [ -z "$VERIFY_PYTHON" ]; then
+        echo "e2xray: Python is required to verify protected package integrity." >&2
+        exit 1
+    fi
+    if ! "$VERIFY_PYTHON" "$INTEGRITY_VERIFY" >/dev/null 2>&1; then
+        echo "e2xray: protected package integrity verification failed." >&2
+        exit 1
+    fi
+fi
 
 if ! /usr/lib/e2xray/bin/xray version >/dev/null 2>&1; then
     echo "e2xray: the embedded Xray core cannot run on this receiver." >&2
     echo "Receiver kernel architecture: $(uname -m 2>/dev/null || echo unknown)" >&2
-    echo "Install the DEB matching dpkg --print-architecture." >&2
+    echo "Install the DEB/IPK matching the architectures reported by dpkg or opkg." >&2
     exit 1
+fi
+
+mkdir -p "$USER_HOME" 2>/dev/null || true
+# Some images (notably several arm64/DreamOS images) use /home/root rather
+# than /root as root's home directory.  Create the file here instead of
+# shipping it at a fixed path in the data archive.
+if [ ! -e "$USERCONF" ]; then
+    ( umask 077
+      printf '%s\n' '# Paste one VLESS, VMess, Trojan or Shadowsocks share link per line.' \
+          > "$USERCONF" )
 fi
 
 if [ -f "$OLD_USERCONF" ]; then
@@ -25,8 +89,36 @@ if [ -f "$OLD_USERCONF" ]; then
 fi
 chmod 600 "$USERCONF" 2>/dev/null || true
 
+# If config.txt already holds profiles, adopt the first one now. Without this a
+# fresh install starts with nothing selected and the first press of Start fails
+# with "No Configuration Selected" even though a usable profile is listed.
+mkdir -p /etc/e2xray 2>/dev/null || true
+for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        if "$candidate" "$PLUGIN_DIR/proxy_config.py" --ensure-selection \
+            "$USERCONF" /etc/e2xray/selected >/dev/null 2>&1; then
+            break
+        fi
+    fi
+done
+
 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh stop >/dev/null 2>&1 || true
 /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh install-init >/dev/null 2>&1 || true
+if ! /usr/lib/enigma2/python/Plugins/Extensions/e2xray/e2xrayctl.sh ensure-tun \
+    >/dev/null 2>&1; then
+    echo "WARNING: e2xray was installed, but the TUN kernel module is unavailable." >&2
+    echo "Install kernel-module-tun manually; e2xray cannot work without it." >&2
+fi
+
+# /tmp is a RAM disk on these receivers and the package is 12-60 MB. The
+# installer left its copy behind, so free it now that the files are unpacked.
+rm -f /tmp/enigma2-plugin-extensions-e2xray_*.deb \
+    /tmp/enigma2-plugin-extensions-e2xray_*.ipk \
+    /tmp/enigma2-plugin-extensions-e2xray_*.deb.sha256 \
+    /tmp/enigma2-plugin-extensions-e2xray_*.ipk.sha256 \
+    /tmp/enigma2-plugin-extensions-e2xray_*.deb.sig \
+    /tmp/enigma2-plugin-extensions-e2xray_*.ipk.sig 2>/dev/null || true
+rm -rf /tmp/e2xray-install /tmp/.e2xray-unpack 2>/dev/null || true
 
 if [ "${1:-configure}" = "configure" ]; then
     echo "Now we are restarting your Enigma2"

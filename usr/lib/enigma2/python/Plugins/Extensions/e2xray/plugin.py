@@ -31,6 +31,7 @@ from skin import parseColor
 from . import PLUGIN_VERSION
 from .proxy_config import (
     clear_selection,
+    ensure_selection,
     read_profiles,
     read_selection,
     write_selection,
@@ -40,11 +41,30 @@ PLUGIN_NAME = "e2xray"
 PLUGIN_DESCRIPTION = "Xray Client for Enigma2"
 BASE = "/usr/lib/enigma2/python/Plugins/Extensions/e2xray"
 CTL = BASE + "/e2xrayctl.sh"
-USERCONF = "/root/config.txt"
+
+
+def userconf_path():
+    """Use the root home directory provided by the receiver image."""
+    if os.path.isdir("/root"):
+        return "/root/config.txt"
+    return "/home/root/config.txt"
+
+
+USERCONF = userconf_path()
 SELECTION = "/etc/e2xray/selected"
 PIDFILE = "/var/run/e2xray/xray.pid"
 ACTIVE_PROFILE = "/var/run/e2xray/active_profile"
-
+BACKEND_FILE = "/var/run/e2xray/network-backend"
+RUNTIME_MARKERS = (
+    PIDFILE,
+    ACTIVE_PROFILE,
+    "/var/run/e2xray/state",
+    "/var/run/e2xray/resolv.conf.bak",
+    "/var/run/e2xray/policy-table-owned",
+    "/var/run/e2xray/policy-rule-owned",
+    "/var/run/e2xray/split-routes-owned",
+    "/var/run/e2xray/network-backend",
+)
 config.plugins.e2xray = ConfigSubsection()
 config.plugins.e2xray.ui_language = ConfigSelection(
     default="en",
@@ -53,6 +73,7 @@ config.plugins.e2xray.ui_language = ConfigSelection(
 
 TEXT = {
     "en": {
+        "network": "Network status",
         "internet": "Internet status",
         "checking": "Checking",
         "online": "Online",
@@ -62,6 +83,8 @@ TEXT = {
         "started": "VPN Started",
         "stopped": "VPN Stopped",
         "start_failed": "Could not start the configuration.",
+        "start_detail": "Could not start the configuration:\n%s",
+        "execute_failed": "Could not run the e2xray control command.",
         "stop_failed": "Could not stop the proxy.",
         "ping": "Ping",
         "settings": "Settings",
@@ -82,6 +105,7 @@ TEXT = {
         "version": "Plugin version",
     },
     "fa": {
+        "network": "وضعیت شبکه",
         "internet": "وضعیت اینترنت",
         "checking": "در حال بررسی",
         "online": "آنلاین",
@@ -91,6 +115,8 @@ TEXT = {
         "started": "کانفیگ استارت شد",
         "stopped": "فیلترشکن متوقف شد",
         "start_failed": "کانفیگ استارت نشد",
+        "start_detail": "کانفیگ استارت نشد:\n%s",
+        "execute_failed": "فرمان کنترل e2xray اجرا نشد.",
         "stop_failed": "فیلترشکن متوقف نشد",
         "ping": "پینگ",
         "settings": "تنظیمات",
@@ -111,6 +137,7 @@ TEXT = {
         "version": "نسخه پلاگین",
     },
     "ar": {
+        "network": "حالة الشبكة",
         "internet": "حالة الإنترنت",
         "checking": "جار الفحص",
         "online": "متصل",
@@ -120,6 +147,8 @@ TEXT = {
         "started": "تم تشغيل الاتصال",
         "stopped": "تم إيقاف البروكسي",
         "start_failed": "تعذر تشغيل الاتصال",
+        "start_detail": "تعذر تشغيل الاتصال:\n%s",
+        "execute_failed": "تعذر تشغيل أمر التحكم في e2xray.",
         "stop_failed": "تعذر إيقاف البروكسي",
         "ping": "اختبار",
         "settings": "الإعدادات",
@@ -142,9 +171,124 @@ TEXT = {
 }
 
 
+# The control layer reports a machine-readable code plus an English detail.
+# Users see the localized explanation and the actionable next step; the raw
+# detail is kept in /tmp/e2xray.log for support.
+ERROR_TEXT = {
+    "en": {
+        "NO_CONFIG": "No valid configuration was found. Check %s." % USERCONF,
+        "CORE_MISSING": "The bundled Xray core is missing. Reinstall the package.",
+        "INTEGRITY_FAILED": "Protected files were modified. Reinstall the original package.",
+        "PYTHON_MISSING": "This image has no usable Python interpreter.",
+        "ROUTE_MISSING": "No default network interface was found. Check the network settings.",
+        "DNS_FAILED": "The proxy server address could not be resolved.",
+        "CONFIG_INVALID": "Xray rejected this configuration. Check the share link.",
+        "NO_NETWORK_BACKEND": (
+            "This image cannot capture traffic: it has neither TUN nor iptables.\n"
+            "Install kernel-module-tun and iptables with opkg, then reboot."
+        ),
+        "TUN_CREATE_FAILED": "The TUN interface could not be created.",
+        "TUN_LINK_FAILED": "The TUN interface could not be brought up.",
+        "TUN_ADDRESS_FAILED": "The TUN interface address could not be assigned.",
+        "ROUTE_TABLE_FAILED": "The routing table could not be prepared.",
+        "IP_RULE_FAILED": "This image's ip command does not support policy routing.",
+        "SERVER_BYPASS_ROUTE_FAILED": "The proxy-server bypass route could not be installed.",
+        "TPROXY_SETUP_FAILED": "TPROXY is unavailable on this image.",
+        "REDIRECT_SETUP_FAILED": "iptables REDIRECT is unavailable on this image.",
+        "BACKEND_CONFIG_FAILED": "Xray could not be configured for this mode.",
+        "DNS_WRITE_FAILED": "/etc/resolv.conf could not be updated.",
+        "SERVER_FILTERED": (
+            "This configuration's server address is blocked on your connection:\n"
+            "your provider redirects it to a filtering page. Choose another\n"
+            "configuration, or one that uses a plain IP address."
+        ),
+        "TUNNEL_DEAD": (
+            "The tunnel started but carried no traffic, so the server is not\n"
+            "answering. Normal networking has been restored. Try another\n"
+            "configuration."
+        ),
+    },
+    "fa": {
+        "NO_CONFIG": "کانفیگ معتبری پیدا نشد. فایل ‎%s را بررسی کنید." % USERCONF,
+        "CORE_MISSING": "هستهٔ Xray در بسته نیست. بسته را دوباره نصب کنید.",
+        "INTEGRITY_FAILED": "فایل‌های محافظت‌شده تغییر کرده‌اند. بستهٔ اصلی را دوباره نصب کنید.",
+        "PYTHON_MISSING": "این ایمیج مفسر پایتون قابل استفاده ندارد.",
+        "ROUTE_MISSING": "کارت شبکهٔ پیش‌فرض پیدا نشد. تنظیمات شبکه را بررسی کنید.",
+        "DNS_FAILED": "آدرس سرور پروکسی resolve نشد.",
+        "CONFIG_INVALID": "Xray این کانفیگ را نپذیرفت. لینک اشتراک را بررسی کنید.",
+        "NO_NETWORK_BACKEND": (
+            "این ایمیج امکان گرفتن ترافیک را ندارد: نه TUN دارد نه iptables.\n"
+            "با opkg بسته‌های kernel-module-tun و iptables را نصب و ریست کنید."
+        ),
+        "TUN_CREATE_FAILED": "رابط TUN ساخته نشد.",
+        "TUN_LINK_FAILED": "رابط TUN بالا نیامد.",
+        "TUN_ADDRESS_FAILED": "آدرس رابط TUN تنظیم نشد.",
+        "ROUTE_TABLE_FAILED": "جدول مسیریابی آماده نشد.",
+        "IP_RULE_FAILED": "دستور ip این ایمیج از policy routing پشتیبانی نمی‌کند.",
+        "SERVER_BYPASS_ROUTE_FAILED": "مسیر مستقیم به سرور پروکسی نصب نشد.",
+        "TPROXY_SETUP_FAILED": "TPROXY روی این ایمیج در دسترس نیست.",
+        "REDIRECT_SETUP_FAILED": "iptables REDIRECT روی این ایمیج در دسترس نیست.",
+        "BACKEND_CONFIG_FAILED": "Xray برای این حالت پیکربندی نشد.",
+        "DNS_WRITE_FAILED": "فایل ‎/etc/resolv.conf به‌روزرسانی نشد.",
+        "SERVER_FILTERED": (
+            "آدرس سرور این کانفیگ روی اینترنت شما فیلتر است:\n"
+            "سرویس‌دهنده آن را به صفحهٔ فیلترینگ هدایت می‌کند. کانفیگ دیگری\n"
+            "انتخاب کنید، یا کانفیگی که مستقیم از IP استفاده می‌کند."
+        ),
+        "TUNNEL_DEAD": (
+            "تونل بالا آمد اما هیچ ترافیکی از آن عبور نکرد؛ سرور پاسخ نمی‌دهد.\n"
+            "اینترنت به حالت عادی برگردانده شد. کانفیگ دیگری را امتحان کنید."
+        ),
+    },
+    "ar": {
+        "NO_CONFIG": "لم يتم العثور على إعداد صالح. تحقق من ‎%s." % USERCONF,
+        "CORE_MISSING": "نواة Xray مفقودة. أعد تثبيت الحزمة.",
+        "INTEGRITY_FAILED": "تم تعديل الملفات المحمية. أعد تثبيت الحزمة الأصلية.",
+        "PYTHON_MISSING": "لا يوجد مفسر Python صالح في هذه النسخة.",
+        "ROUTE_MISSING": "لم يتم العثور على واجهة الشبكة الافتراضية.",
+        "DNS_FAILED": "تعذر ترجمة عنوان خادم البروكسي.",
+        "CONFIG_INVALID": "رفض Xray هذا الإعداد. تحقق من رابط المشاركة.",
+        "NO_NETWORK_BACKEND": (
+            "هذه النسخة لا تستطيع التقاط حركة المرور: لا TUN ولا iptables.\n"
+            "ثبّت kernel-module-tun و iptables عبر opkg ثم أعد التشغيل."
+        ),
+        "TUN_CREATE_FAILED": "تعذر إنشاء واجهة TUN.",
+        "TUN_LINK_FAILED": "تعذر تشغيل واجهة TUN.",
+        "TUN_ADDRESS_FAILED": "تعذر تعيين عنوان واجهة TUN.",
+        "ROUTE_TABLE_FAILED": "تعذر تجهيز جدول التوجيه.",
+        "IP_RULE_FAILED": "أمر ip في هذه النسخة لا يدعم توجيه السياسات.",
+        "SERVER_BYPASS_ROUTE_FAILED": "تعذر تثبيت مسار تجاوز خادم البروكسي.",
+        "TPROXY_SETUP_FAILED": "TPROXY غير متاح في هذه النسخة.",
+        "REDIRECT_SETUP_FAILED": "iptables REDIRECT غير متاح في هذه النسخة.",
+        "BACKEND_CONFIG_FAILED": "تعذر تهيئة Xray لهذا الوضع.",
+        "DNS_WRITE_FAILED": "تعذر تحديث ‎/etc/resolv.conf.",
+        "SERVER_FILTERED": (
+            "عنوان خادم هذا الإعداد محجوب على اتصالك: يعيد مزود الخدمة\n"
+            "توجيهه إلى صفحة الحجب. اختر إعدادًا آخر أو إعدادًا يستخدم عنوان IP."
+        ),
+        "TUNNEL_DEAD": (
+            "بدأ النفق لكن لم تمر أي حركة مرور خلاله؛ الخادم لا يستجيب.\n"
+            "تمت استعادة الاتصال الطبيعي. جرّب إعدادًا آخر."
+        ),
+    },
+}
+
+
 def tr(key):
     language = config.plugins.e2xray.ui_language.value
     return TEXT.get(language, TEXT["en"]).get(key, key)
+
+
+def errorText(code, detail):
+    """Localized explanation for a control-layer error code."""
+    language = config.plugins.e2xray.ui_language.value
+    table = ERROR_TEXT.get(language, ERROR_TEXT["en"])
+    message = table.get(code) or ERROR_TEXT["en"].get(code)
+    if not message:
+        return detail or tr("start_failed")
+    if detail and detail != message:
+        return "%s\n\n(%s)" % (message, detail)
+    return message
 
 
 def guiText(value):
@@ -159,6 +303,32 @@ def guiText(value):
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def sameLabel(left, right):
+    """Compare two menu labels regardless of str/unicode representation.
+
+    On Python 2 images the listbox hands back a unicode object while the label
+    list still holds UTF-8 byte strings. Comparing the two makes Python decode
+    the bytes as ASCII, which silently fails for every non-Latin script: the
+    menu worked in English and stopped responding in Persian and Arabic.
+    """
+    return guiText(left) == guiText(right)
+
+
+def menuIndex(menu):
+    """Selected row of a MenuList, across Enigma2 API variations."""
+    for name in ("getSelectionIndex", "getSelectedIndex", "getCurrentIndex"):
+        getter = getattr(menu, name, None)
+        if not callable(getter):
+            continue
+        try:
+            index = int(getter())
+        except Exception:
+            continue
+        if index >= 0:
+            return index
+    return -1
 
 
 def connectSignal(signal, callback):
@@ -180,13 +350,36 @@ def outputValue(output, key):
 
 
 def coreRunning():
+    """Return True only when the recorded PID is the bundled Xray process."""
     try:
         with open(PIDFILE, "r") as source:
             pid = int(source.readline().strip())
+        if pid <= 1:
+            return False
         os.kill(pid, 0)
-        return True
+
+        proc_cmdline = "/proc/%d/cmdline" % pid
+        with open(proc_cmdline, "rb") as source:
+            command = source.read().replace(b"\x00", b" ")
+        if not isinstance(command, str):
+            command = command.decode("utf-8", "ignore")
+        return "/usr/lib/e2xray/bin/xray" in command
     except (IOError, OSError, TypeError, ValueError):
         return False
+
+
+def runtimeStatePresent():
+    return any(os.path.exists(path) for path in RUNTIME_MARKERS)
+
+
+def activeBackend():
+    if not coreRunning():
+        return ""
+    try:
+        with open(BACKEND_FILE, "r") as source:
+            return source.readline().strip().upper()
+    except (IOError, OSError):
+        return ""
 
 
 def activeProfileId():
@@ -264,11 +457,14 @@ class E2XrayProfileList(MenuList):
 class E2XrayMain(Screen):
     skin = """
     <screen name="E2XrayMain" position="center,center" size="760,520" title="e2xray">
-        <widget name="internet_label" position="85,40" size="235,42" font="Regular;26" />
-        <widget name="lamp" position="330,42" size="38,38" font="Regular;32" />
-        <widget name="internet_msg" position="385,40" size="290,42" font="Regular;26" />
-        <widget name="configuration_label" position="85,105" size="590,38" font="Regular;24" />
-        <widget name="profiles" position="85,148" size="590,252" scrollbarMode="showOnDemand" />
+        <widget name="network_label" position="85,28" size="235,42" font="Regular;26" />
+        <widget name="network_lamp" position="330,30" size="38,38" font="Regular;32" />
+        <widget name="network_msg" position="385,28" size="290,42" font="Regular;26" />
+        <widget name="internet_label" position="85,78" size="235,42" font="Regular;26" />
+        <widget name="internet_lamp" position="330,80" size="38,38" font="Regular;32" />
+        <widget name="internet_msg" position="385,78" size="290,42" font="Regular;26" />
+        <widget name="configuration_label" position="85,135" size="590,38" font="Regular;24" />
+        <widget name="profiles" position="85,178" size="590,222" scrollbarMode="showOnDemand" />
         <widget name="key_red" position="35,455" size="150,38" font="Regular;22" foregroundColor="red" halign="center" />
         <widget name="key_green" position="205,455" size="150,38" font="Regular;22" foregroundColor="green" halign="center" />
         <widget name="key_yellow" position="375,455" size="150,38" font="Regular;22" foregroundColor="yellow" halign="center" />
@@ -279,22 +475,31 @@ class E2XrayMain(Screen):
         Screen.__init__(self, session)
         self.session = session
         self.container = eConsoleAppContainer()
+        self.network_container = eConsoleAppContainer()
         self.internet_container = eConsoleAppContainer()
         self.signal_connections = [
             connectSignal(self.container.appClosed, self.commandDone),
             connectSignal(self.container.dataAvail, self.commandOutput),
+            connectSignal(self.network_container.appClosed, self.networkDone),
+            connectSignal(self.network_container.dataAvail, self.networkOutput),
             connectSignal(self.internet_container.appClosed, self.internetDone),
             connectSignal(self.internet_container.dataAvail, self.internetOutput),
         ]
         self.output = ""
+        self.network_output = ""
+        self.network_busy = False
         self.internet_output = ""
         self.internet_busy = False
         self.current_action = None
         self.pending_ping_id = ""
         self.ping_results = {}
+        self.network_state = "checking"
         self.internet_state = "checking"
+        self["network_label"] = Label("")
+        self["network_lamp"] = Label("●")
+        self["network_msg"] = Label("")
         self["internet_label"] = Label("")
-        self["lamp"] = Label("●")
+        self["internet_lamp"] = Label("●")
         self["internet_msg"] = Label("")
         self["configuration_label"] = Label("")
         self["profiles"] = E2XrayProfileList()
@@ -321,12 +526,22 @@ class E2XrayMain(Screen):
     def firstRun(self):
         self.reloadProfiles()
         self.refreshText()
+        # Missing TUN is no longer a fatal GUI condition. The control layer
+        # automatically falls back to TPROXY and then TCP REDIRECT when needed.
+        self.runNetworkCheck()
         self.runInternetCheck()
 
     def refreshText(self):
+        self["network_label"].setText(tr("network"))
+        self["network_msg"].setText(tr(self.network_state))
         self["internet_label"].setText(tr("internet"))
         self["internet_msg"].setText(tr(self.internet_state))
-        self["configuration_label"].setText(tr("configurations"))
+        backend = activeBackend()
+        self["configuration_label"].setText(
+            "%s (%s)" % (tr("configurations"), backend)
+            if backend
+            else tr("configurations")
+        )
         self["key_red"].setText(tr("stop"))
         self["key_green"].setText(tr("start"))
         self["key_yellow"].setText(tr("ping"))
@@ -339,6 +554,23 @@ class E2XrayMain(Screen):
         except Exception:
             data = str(data)
         self.output += data
+
+    def networkOutput(self, data):
+        try:
+            if not isinstance(data, str):
+                data = data.decode("utf-8", "ignore")
+        except Exception:
+            data = str(data)
+        self.network_output += data
+
+    def networkDone(self, retval):
+        output = self.network_output
+        self.network_output = ""
+        self.network_busy = False
+        if "E2XRAY_LAN=ONLINE" in output:
+            self.setNetwork("online", "green")
+        else:
+            self.setNetwork("offline", "red")
 
     def internetOutput(self, data):
         try:
@@ -360,7 +592,7 @@ class E2XrayMain(Screen):
     def commandDone(self, retval):
         output = self.output
         action = self.current_action
-        refresh_internet = False
+        refresh_connectivity = False
         self.output = ""
         self.current_action = None
 
@@ -392,37 +624,47 @@ class E2XrayMain(Screen):
                 self.session.open(MessageBox, tr("ping_failed"), MessageBox.TYPE_ERROR, timeout=7)
             self.pending_ping_id = ""
         elif action == "start":
-            if "E2XRAY_ERROR=NO_CONFIG" in output:
+            if "E2XRAY_NOOP=ALREADY_RUNNING" in output:
+                backend = activeBackend()
                 self.session.open(
                     MessageBox,
-                    tr("no_config"),
-                    MessageBox.TYPE_ERROR,
-                    timeout=7,
-                )
-            elif retval == 0:
-                self.session.open(
-                    MessageBox,
-                    tr("started"),
+                    "%s (%s)" % (tr("started"), backend) if backend else tr("started"),
                     MessageBox.TYPE_INFO,
                     timeout=5,
                 )
-                refresh_internet = True
-            else:
+            elif "E2XRAY_NOOP=" in output:
+                # Another state-changing command owns the control lock.
+                pass
+            elif retval == 0 and "E2XRAY_ACTION=STARTED" in output:
+                backend = outputValue(output, "E2XRAY_BACKEND")
                 self.session.open(
                     MessageBox,
-                    tr("start_failed"),
+                    "%s (%s)" % (tr("started"), backend) if backend else tr("started"),
+                    MessageBox.TYPE_INFO,
+                    timeout=5,
+                )
+                refresh_connectivity = True
+            else:
+                code = outputValue(output, "E2XRAY_ERROR")
+                detail = outputValue(output, "E2XRAY_ERROR_DETAIL")
+                self.session.open(
+                    MessageBox,
+                    errorText(code, detail),
                     MessageBox.TYPE_ERROR,
-                    timeout=7,
+                    timeout=20,
                 )
         elif action == "stop":
-            if retval == 0:
+            if "E2XRAY_NOOP=" in output:
+                # Already stopped/busy is a silent no-op by design.
+                pass
+            elif retval == 0 and "E2XRAY_ACTION=STOPPED" in output:
                 self.session.open(
                     MessageBox,
                     tr("stopped"),
                     MessageBox.TYPE_INFO,
                     timeout=5,
                 )
-                refresh_internet = True
+                refresh_connectivity = True
             else:
                 self.session.open(
                     MessageBox,
@@ -432,34 +674,69 @@ class E2XrayMain(Screen):
                 )
         if action in ("start", "stop"):
             self.reloadProfiles()
-        if refresh_internet:
+            self.refreshText()
+        if refresh_connectivity:
+            self.runNetworkCheck()
             self.runInternetCheck()
 
-    def setInternet(self, state, color):
-        colors = {"green": "00cc44", "red": "ff3030"}
-        self.internet_state = state
-        self["lamp"].setText("●")
+    def setNetwork(self, state, color):
+        colors = {"green": "00cc44", "red": "ff3030", "yellow": "ffd000"}
+        self.network_state = state
+        self["network_lamp"].setText("●")
         try:
-            self["lamp"].instance.setForegroundColor(parseColor("#" + colors[color]))
+            self["network_lamp"].instance.setForegroundColor(parseColor("#" + colors[color]))
+        except Exception:
+            pass
+        self["network_msg"].setText(tr(state))
+
+    def setInternet(self, state, color):
+        colors = {"green": "00cc44", "red": "ff3030", "yellow": "ffd000"}
+        self.internet_state = state
+        self["internet_lamp"].setText("●")
+        try:
+            self["internet_lamp"].instance.setForegroundColor(parseColor("#" + colors[color]))
         except Exception:
             pass
         self["internet_msg"].setText(tr(state))
 
     def runCtl(self, argument, action):
+        # Only one control operation may be in flight at a time. This protects
+        # Start/Stop/Ping from rapid repeated key presses and race conditions.
+        if self.current_action is not None:
+            return
         if not fileExists(CTL):
             self.session.open(MessageBox, tr("missing"), MessageBox.TYPE_ERROR, timeout=8)
             return
         self.output = ""
         self.current_action = action
-        self.container.execute("%s %s" % (CTL, argument))
+        if self.container.execute("%s %s" % (CTL, argument)) != 0:
+            self.current_action = None
+            self.session.open(
+                MessageBox,
+                tr("execute_failed"),
+                MessageBox.TYPE_ERROR,
+                timeout=8,
+            )
+
+    def runNetworkCheck(self):
+        if self.network_busy or not fileExists(CTL):
+            return
+        self.network_output = ""
+        self.network_busy = True
+        self.setNetwork("checking", "yellow")
+        if self.network_container.execute("%s network" % CTL) != 0:
+            self.network_busy = False
+            self.setNetwork("offline", "red")
 
     def runInternetCheck(self):
         if self.internet_busy or not fileExists(CTL):
             return
         self.internet_output = ""
         self.internet_busy = True
+        self.setInternet("checking", "yellow")
         if self.internet_container.execute("%s internet" % CTL) != 0:
             self.internet_busy = False
+            self.setInternet("offline", "red")
 
     def reloadProfiles(self, preferred_id=None):
         try:
@@ -469,6 +746,14 @@ class E2XrayMain(Screen):
             if selected_id and selected_id not in known_ids:
                 clear_selection(SELECTION)
                 selected_id = ""
+            if not selected_id:
+                # Fresh install: config.txt already holds profiles but nothing
+                # has been selected yet. Adopt the first one so Start works
+                # straight away instead of reporting "No Configuration
+                # Selected".
+                adopted = ensure_selection(profiles, SELECTION)
+                if adopted is not None:
+                    selected_id = adopted["PROFILE_ID"]
         except (IOError, OSError, ValueError):
             profiles = []
             selected_id = ""
@@ -544,6 +829,8 @@ class E2XrayMain(Screen):
         return None
 
     def selectHighlighted(self):
+        if self.current_action is not None:
+            return
         profile = self.currentProfile()
         if not profile:
             return
@@ -558,11 +845,12 @@ class E2XrayMain(Screen):
             self.reloadProfiles(active_id)
             return
         selected_id = read_selection(SELECTION)
+        if selected_id == profile["PROFILE_ID"]:
+            # Pressing OK on the already-selected profile is a no-op. Clearing
+            # it would only produce a state in which Start refuses to run.
+            return
         try:
-            if selected_id == profile["PROFILE_ID"]:
-                clear_selection(SELECTION)
-            else:
-                write_selection(SELECTION, profile["PROFILE_ID"])
+            write_selection(SELECTION, profile["PROFILE_ID"])
         except (IOError, OSError, ValueError):
             self.session.open(
                 MessageBox,
@@ -574,24 +862,49 @@ class E2XrayMain(Screen):
         self.reloadProfiles(profile["PROFILE_ID"])
 
     def start(self):
+        if self.current_action is not None:
+            return
+        # Keep Start idempotent, but confirm the running state to the user.
+        # This restores the "VPN Started" notification from earlier releases
+        # without restarting Xray or disturbing the active tunnel.
+        if coreRunning():
+            backend = activeBackend()
+            self.session.open(
+                MessageBox,
+                "%s (%s)" % (tr("started"), backend) if backend else tr("started"),
+                MessageBox.TYPE_INFO,
+                timeout=5,
+            )
+            return
         if self.selectedProfile():
             self.runCtl("start", "start")
 
     def stop(self):
+        # Repeated Stop after a clean shutdown is silent. If Xray crashed but
+        # left routes/DNS runtime state behind, allow Stop to perform recovery.
+        if self.current_action is not None:
+            return
+        if not coreRunning() and not runtimeStatePresent():
+            return
         self.runCtl("stop", "stop")
 
     def ping(self):
+        if self.current_action is not None:
+            return
         profile = self.selectedProfile()
         if profile:
             self.pending_ping_id = profile["PROFILE_ID"]
             self.runCtl("ping", "ping")
 
     def settings(self):
+        if self.current_action is not None:
+            return
         self.session.openWithCallback(self.settingsClosed, E2XraySettingsMenu)
 
     def settingsClosed(self, *args):
         self.reloadProfiles()
         self.refreshText()
+        self.runNetworkCheck()
         self.runInternetCheck()
 
 
@@ -604,7 +917,7 @@ class E2XraySettingsMenu(Screen):
 
     def __init__(self, session):
         Screen.__init__(self, session)
-        self.labels = [tr("language"), tr("about")]
+        self.labels = [guiText(tr("language")), guiText(tr("about"))]
         self["menu"] = MenuList(self.labels)
         self["key_red"] = Label(tr("close"))
         self["actions"] = ActionMap(
@@ -620,14 +933,23 @@ class E2XraySettingsMenu(Screen):
         )
 
     def openSelected(self):
-        current = self["menu"].getCurrent()
-        if current == self.labels[0]:
+        # Dispatch by row index, never by label text: the label is translated
+        # and comparing a unicode row against a UTF-8 byte label fails on
+        # Python 2 for every non-Latin script.
+        index = menuIndex(self["menu"])
+        if index < 0:
+            current = self["menu"].getCurrent()
+            for position, label in enumerate(self.labels):
+                if sameLabel(current, label):
+                    index = position
+                    break
+        if index == 0:
             self.session.openWithCallback(self.refresh, E2XrayLanguage)
-        elif current == self.labels[1]:
+        elif index == 1:
             self.session.open(E2XrayAbout)
 
     def refresh(self, *args):
-        self.labels = [tr("language"), tr("about")]
+        self.labels = [guiText(tr("language")), guiText(tr("about"))]
         self["menu"].setList(self.labels)
         self["key_red"].setText(tr("close"))
 
